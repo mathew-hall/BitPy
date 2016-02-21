@@ -13,7 +13,7 @@ def bencode_list(values):
 	return "l%d%se"%(items,"".join(map(bencode, values)))
 
 def bencode_dict(values):
-	encoded_values = ["".join((bencode(k), bencode(v))) for k,v in values.iteritems()]
+	encoded_values = ["".join((bencode(k), bencode(v))) for k,v in sorted(values.iteritems())]
 	return "d%se"%"".join(encoded_values)
 	
 	
