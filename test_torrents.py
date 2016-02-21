@@ -8,3 +8,4 @@ def test_load_ubuntu():
 	assert_equals(file.creation_date, 1445507299)
 	assert_equals(file.info.filemode,'single')
 	assert_equals(file.info.files,[{'path':['ubuntu-15.10-desktop-amd64.iso'], 'length':1178386432, 'md5sum':None}])
+	assert_equals(file.info_hash.encode("hex"), '3f19b149f53a50e14fc0b79926a391896eabab6f')

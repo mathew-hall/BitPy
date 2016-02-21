@@ -1,4 +1,5 @@
 import bencode
+import hashlib
 
 class Info:
 	piece_length = None
@@ -50,11 +51,15 @@ class TorrentFile:
 					setattr(self,k.replace('-','_').replace(" ",'_'),v)
 				else:
 					self.info = Info(v)
+			
+			sha1 = hashlib.sha1()
+			sha1.update(bencode.bencode(torrent_file_contents['info']))
+			self.info_hash = sha1.digest()
 	
 	
 	
 	def __repr__(self):
-		return repr({"info":self.info, "announce":self.announce, "announce-list":self.announce_list, "creation date": self.creation_date, "comment":self.comment, "created by": self.created_by, "encoding": self.encoding})
+		return repr({"info":self.info, "announce":self.announce, "announce-list":self.announce_list, "creation date": self.creation_date, "comment":self.comment, "created by": self.created_by, "encoding": self.encoding, 'info hash': self.info_hash})
 
 def load_torrent_file(path):
 	with open(path) as torrentfile:
