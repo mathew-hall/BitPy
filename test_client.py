@@ -1,4 +1,5 @@
 from nose.tools import assert_equals
+from nose.tools import assert_true
 import BitPy.bencode
 
 def test_bencode_string():
@@ -23,3 +24,18 @@ def test_bendecode_list():
 	assert_equals(BitPy.bencode.bendecode("le"),[])
 	assert_equals(BitPy.bencode.bendecode("li1ei2ei3ee"),[1,2,3])
 	assert_equals(BitPy.bencode.bendecode("d3:abci3ee"),{'abc':3})
+
+def test_bendecode_list_of_lists():
+	assert_equals(BitPy.bencode.bendecode("lli1eee"),[[1]])
+
+def test_bendecode_torrent_fragment():
+	fragment = "d8:announce39:http://torrent.ubuntu.com:6969/announce13:announce-listll39:http://torrent.ubuntu.com:6969/announceel44:http://ipv6.torrent.ubuntu.com:6969/announceee7:comment29:Ubuntu CD releases.ubuntu.com13:creation datei1445507299ee"
+	result = BitPy.bencode.bendecode(fragment)
+	assert_true("announce" in result)
+	
+def test_bendecode_torrent():
+	with open("ubuntu-15.10-desktop-amd64.iso.torrent") as torrentfile:
+		contents = torrentfile.read()
+		result = BitPy.bencode.bendecode(contents)
+		assert_true("announce" in result) 
+		assert_true("info" in result)

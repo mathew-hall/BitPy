@@ -44,7 +44,7 @@ def bendecode_list(string):
 	skip_l = string[1:]
 	result = []
 	rest = skip_l
-	while rest != 'e':
+	while rest[0] != 'e':
 		(item,rest) = bendecode_chunk(rest)
 		result.append(item)
 	return (result,rest[1:])
@@ -53,7 +53,7 @@ def bendecode_dict(string):
 	skip_d = string[1:]
 	result = {}
 	rest = skip_d
-	while rest != 'e':
+	while rest[0] != 'e':
 		(key, rest) = bendecode_chunk(rest)
 		(val, rest) = bendecode_chunk(rest)
 		result[key] = val
@@ -69,7 +69,7 @@ def bendecode_chunk(string):
 		return bendecode_list(string)
 	if first == 'd':
 		return bendecode_dict(string)
-	raise Exception('Unsupported type %s'%repr(string))
+	raise Exception('Unsupported type %s %s'%(first,repr(string)))
 
 def bendecode(string):
 	return bendecode_chunk(string)[0]
