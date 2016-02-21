@@ -10,14 +10,14 @@ def bencode_list(values):
 	items = len(values)
 	if items == 0:
 		return "le"
-	return "l%d%se"%(items,"".join(map(bencode_item, values)))
+	return "l%d%se"%(items,"".join(map(bencode, values)))
 
 def bencode_dict(values):
-	encoded_values = ["".join((bencode_item(k), bencode_item(v))) for k,v in values.iteritems()]
+	encoded_values = ["".join((bencode(k), bencode(v))) for k,v in values.iteritems()]
 	return "d%se"%"".join(encoded_values)
 	
 	
-def bencode_item(value):
+def bencode(value):
 	if isinstance(value, str):
 		return bencode_string(value)
 	if isinstance(value, dict):
