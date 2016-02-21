@@ -30,6 +30,12 @@ class Info:
 	
 	
 class TorrentFile:
+	"""
+	A Torrent file contains the metadata we need to ask peers for file pieces.
+	It contains, at least, an info and announce value; the info includes file metadata
+	(including SHA1 hashes of the pieces) and the announce value specifies the tracker(s)
+	that coordinate the swarm.
+	"""
 	info = None
 	announce = None
 	announce_list = None
