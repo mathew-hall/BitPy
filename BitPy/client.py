@@ -22,6 +22,23 @@ class Download():
 		self.tracker_id = None
 		self.connected_peers = []
 	
+	def get_bitfield(self):
+		num_pieces = len(self.torrent.info.pieces)
+		
+		bitfield = list('\x00' * int(math.ceil(num_pieces / 8.0)))
+		
+		self.logger.debug("State is %s", repr(self.piece_state))
+		
+		for piece,state in self.piece_state.iteritems():
+			if self.piece_progress(piece) == 1:
+				self.logger.debug("Have piece %d",piece)
+				index = piece // 8
+				bit   = 7 - (piece % 8)
+				bitfield[index] = chr(ord(bitfield[index]) | (1 << bit))
+				self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
+		return bitfield
+		
+		
 	def piece_progress(self, index):
 		piece_size = self.torrent.info.piece_length
 		if index not in self.piece_state:
@@ -66,8 +83,8 @@ class Peer():
 	
 	def set_have(self, piece):
 		index = piece // 8
-		bit   = 8 - (piece % 8)
-		self.bitfield[index] = self.bitfield[index] & (1 << bit)
+		bit   = 7 - (piece % 8)
+		self.bitfield[index] = self.bitfield[index] | (1 << bit)
 		
 	def set_bitfield(self, bitfield):
 		self.bitfield = list(bitfield)
