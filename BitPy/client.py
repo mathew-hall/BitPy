@@ -5,20 +5,78 @@ import bencode
 import logging
 import StringIO
 import struct
+import math
 
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import Int32StringReceiver
 from twisted.internet import reactor
 
-class Peer():
+class Download():
+	logger = logging.getLogger(__name__)
 	
-	def __init__(self, host, port, peer_id=None):
+	def __init__(self, torrent):
+		self.torrent = torrent
+		self.peers = []
+		self.pieces = {}
+		self.piece_state = {}
+		self.tracker_id = None
+		self.connected_peers = []
+	
+	def piece_progress(self, index):
+		piece_size = self.torrent.info.piece_length
+		if index not in self.piece_state:
+			return 0
+		
+		current_end_byte = 0
+		missing = 0
+		for (start,next_byte) in self.piece_state[index]:
+			missing = missing + start - current_end_byte
+			current_end_byte = next_byte
+
+		missing = missing + piece_size - current_end_byte
+		
+		return (piece_size - missing) / float(piece_size)
+		
+	def store_piece(self, index, begin, data):
+		piece_size = self.torrent.info.piece_length
+		data_size = len(data)
+		chunk = self.pieces.get(index, list('\x00' * piece_size))
+		chunk[begin:begin+data_size] = data
+		self.pieces[index] = chunk
+		
+		self.logger.debug("Storing %d bytes at %d; chunk is now %s", data_size,begin,chunk)
+		
+		state = self.piece_state.get(index, [])
+		state.append((begin, begin+data_size))
+		state.sort()
+		
+		self.logger.debug("State is %s", state)
+		
+		self.piece_state[index] = state
+
+class Peer():
+	def __init__(self, host, port, peer_id=None, pieces=0):
 		self.peer_id = peer_id
 		self.host = host
 		self.port = port
-		self.bitfield = ''
-		choked = True
-		interested = False
+		self.bitfield = '\x00' * int(math.ceil(pieces / 8.0))
+		self.choked = True
+		self.interested = False
+		self.requests = []
+	
+	def set_have(self, piece):
+		index = piece // 8
+		bit   = 8 - (piece % 8)
+		self.bitfield[index] = self.bitfield[index] & (1 << bit)
+		
+	def set_bitfield(self, bitfield):
+		self.bitfield = list(bitfield)
+	
+	def add_request(self, index, begin, length):
+		self.requests.append((index,begin,length))
+	
+	def __repr__(self):
+		return repr({'peer id': self.peer_id, 'host':self.host, 'port':self.port, 'bitfield': self.bitfield, 'choked':self.choked, 'interested': self.interested})
 
 class Client():
 
@@ -40,18 +98,15 @@ class Client():
 	
 	
 	def add_torrent(self,torrent):
-		self.torrents[torrent.info_hash] = {\
-			'peers': [], \
-			'tracker id': None, \
-			'pieces': {} \
-		}
+		self.torrents[torrent.info_hash] = Download(torrent)
+
 	
 	def get_needed(self,torrent):
 		return 0
 	
 	def handle_tracker_response(self,info_hash,message):
 		self.logger.info("Tracker state update for %s",str(message))
-		self.torrents[info_hash]['tracker id'] = message.get('tracker id',None)
+		self.torrents[info_hash].tracker_id = message.get('tracker id',None)
 		peerlist = message.get('peers',"")
 		for start in xrange(0,len(peerlist),6):
 			peer = [str(ord(c)) for c in list(peerlist[start:start+6])]
@@ -61,28 +116,30 @@ class Client():
 		self.logger.info("Torrent state is now %s", str(self.torrents[info_hash]))
 		
 	def store_piece(self,info_hash,index,begin,data):
-		index_entry = self.torrents[info_hash]['pieces'].get(index,{})
+		index_entry = self.torrents[info_hash].pieces.get(index,{})
 		index_entry[begin] = data
-		self.torrents[info_hash]['pieces'][index] = index_entry
+		self.torrents[info_hash].pieces[index] = index_entry
 	
-	def add_peer(self, info_hash, host, port, peer_id=None):
-		self.torrents[info_hash]['peers'].append(Peer(host,port,peer_id))
+	def add_peer(self, info_hash, host, port, peer_id=None, connection=None):
+		peer = self.get_peer(info_hash, host=host, port=port, peer_id=peer_id)
+		if peer is None:
+			peer = Peer(host,port,peer_id,len(self.torrents[info_hash].torrent.info.pieces))
+			self.torrents[info_hash].peers.append(peer)
+		if connection:
+			peer.connection = connection
+			self.torrents[info_hash].connected_peers.append(peer)
+		if peer_id is not None and (peer.peer_id != peer_id):
+			self.logger.warn("Peer %s has changed IDs to %s",repr(peer), repr(peer_id))
+			
+		return peer
 		
 	def get_peer(self, info_hash, peer_id=None, host=None, port=None):
-		for peer in self.torrents[info_hash]['peers']:
-			if peer.peer_id == peer_id or (peer.host == host and peer.port == port):
+		for peer in self.torrents[info_hash].peers:
+			if (peer_id is not None and peer.peer_id == peer_id) or (peer.host == host and peer.port == port):
 				return peer
 		return None
 			
-	def set_choked(self, info_hash, peer,choked):
-		self.get_peer(info_hash, peer_id=peer).choked=choked
-	
-	def unchoke_peer(self, info_hash, peer):
-		self.get_peer(info_hash, peer_id=peer).choked=choked
-		
-	def set_interested(self, info_hash, peer, interested):
-		self.get_peer(info_hash, peer_id=peer).interested=interested
-	
+
 
 	def tracker_event(self, torrent, event=""):
 		tracker = torrent.announce
@@ -124,6 +181,7 @@ class PeerConnection(Int32StringReceiver):
 		self.state = "HANDSHAKE"
 		self.preamble_size = 0
 		self.client = client
+		self.peer = None
 	
 	def dataReceived(self, recd):
 		if self.state == "HANDSHAKE":
@@ -169,6 +227,15 @@ class PeerConnection(Int32StringReceiver):
 		else:
 			self.logger.info("Unsupported message %d received from peer %s", message_id, self.transport.getPeer())
 			self.abortConnection()
+			
+	def handle_KEEPALIVE(self):
+		pass
+	
+	def send_KEEPALIVE(self):
+		self.sendString("")	
+	
+	def send_HANDSHAKE(self, info_hash):
+		self.transport.write("".join(['\x13', 'BitTorrent protocol', '\x00'*8, info_hash, self.client.peer_id]))
 	
 	def handle_HANDSHAKE(self, instream):
 		pstrlen = ord(instream[0])
@@ -188,37 +255,61 @@ class PeerConnection(Int32StringReceiver):
 			repr(peer_id)\
 		)
 		self.info_hash = info_hash
-		self.peer_id = peer_id
-		self.client.add_peer(info_hash, self.transport.getPeer().host, self.transport.getPeer().port, peer_id)
-		self.transport.write("".join(['\x13', 'BitTorrent protocol', '\x00'*8, info_hash, self.client.peer_id]))
+		self.peer = self.client.add_peer(info_hash, self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
+		self.send_HANDSHAKE(info_hash)
 		self.state="ACTIVE"
 	
 	def handle_CHOKE(self):
-		self.client.set_choked(self.info_hash,self.peer_id, True)
+		self.peer.choked = True
+		
+	def send_CHOKE(self):
+		self.sendString('\x00')
 	
 	def handle_UNCHOKE(self):
-		self.client.set_choked(self.info_hash,self.peer_id, False)
+		self.peer.choked = False
+		
+	def send_UNCHOKE(self):
+		self.sendString('\x01')
 		
 	def handle_INTERESTED(self):
-		self.client.set_interested(self.info_hash,self.peer_id, True)
+		self.peer.interested=True
+	
+	def send_INTERESTED(self):
+		self.sendString('\x02')
 	
 	def handle_NOT_INTERESTED(self):
-		self.client.set_interested(self.info_hash,self.peer_id, False)
+		self.peer.interested=False
 	
-	def handle_KEEPALIVE(self):
-		pass
-		
+	def send_NOT_INTERESTED(self):
+		self.sendString('\x03')
+	
+	def send_HAVE(self, piece):
+		self.sendString('\x04' + struct.pack('!I', piece))
+	
+	def handle_HAVE(self,line):
+		index = struct.unpack('!I', line)
+		self.peer.set_have(index)
+
 	def handle_REQUEST(self,line):
-		pass
+		self.peer.add_request(*struct.unpack('!3I',line))
+	
+	def send_REQUEST(self,piece,begin,length):
+		self.sendString('\x06' + struct.pack('!3I', piece,begin,length))
 	
 	def handle_BITFIELD(self, line):
-		self.client.get_peer(self.info_hash, peer_id = self.peer_id).bitfield=line
+		self.peer.set_bitfield(line)
+	
+	def send_BITFIELD(self, bits):
+		self.sendString('\x05' + bits)
 	
 	def handle_PIECE(self,line):
 		index,begin = struct.unpack('!II',line[:8])
 		block = line[8:]
 		self.logger.debug("Storing %d bytes at chunk %d offset %d",len(block), index,begin)
 		self.client.store_piece(self.info_hash,index,begin,block)
+		
+	def send_PIECE(self, index, begin, block):
+		self.sendString('\x07' + struct.pack('!II', index,begin) + block)
 	
 
 class PeerClientFactory(Factory):

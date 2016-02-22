@@ -29,7 +29,7 @@ def test_client_updates_tracker_id():
 	torrent = get_torrent()
 	client.add_torrent(torrent)
 	client.handle_tracker_response(torrent.info_hash,{'tracker id':'dead beef face', 'info hash':torrent.info_hash})
-	assert_equals(client.torrents[torrent.info_hash]['tracker id'], 'dead beef face')
+	assert_equals(client.torrents[torrent.info_hash].tracker_id, 'dead beef face')
 	
 def test_client_updates_peer_list():
 	client = BitPy.client.Client()
@@ -37,7 +37,31 @@ def test_client_updates_peer_list():
 	client.add_torrent(torrent)
 	response = {u'peers': u"\xcaSm\xcd\xd5\x80.\xa0\x04p\xc8\xd5\xd5\xde\x96\xb2l\xcfU_\xb8\xc6\x1bE_\x18\xb5\xdb\x96'l=\xaal\x1a\xe2b\xf6\xec\xa5\xa7\xe1\xc6\x1bU\x8b\xd9 O!\xc9\xcf\x12n\xc2\xe2\x9b\t\xde\xa7", u'interval': 1800, u'complete': 3837, u'incomplete': 98}
 	client.handle_tracker_response(torrent.info_hash,response)
-	assert_equals(len(client.torrents[torrent.info_hash]['peers']), 10)
+	assert_equals(len(client.torrents[torrent.info_hash].peers), 10)
+
+
+class TestDownload(unittest.TestCase):
+	def setUp(self):
+		self.torrent = get_torrent()
+		self.download = BitPy.client.Download(self.torrent)
+		self.torrent.info.piece_length = 50
+
+	def test_empty_progress(self):
+		assert_equals(self.download.piece_progress(0), 0)
+	
+	def test_full_progress(self):
+		self.download.store_piece(0,0,'\x00' * self.torrent.info.piece_length)
+		assert_equals(self.download.piece_progress(0), 1)
+
+	def test_full_progress_from_multiple_pieces(self):
+		self.download.store_piece(0,0,'\xaa' * 10)
+		self.download.store_piece(0,10,'\x01' * (self.torrent.info.piece_length - 10))
+		assert_equals(self.download.piece_progress(0), 1)
+	
+	def test_partial_progress(self):
+		self.download.store_piece(0,0,'\xaa' * 25)
+		assert_equals(self.download.piece_progress(0), 0.5)
+	
 
 class TestClient(unittest.TestCase):
 	def setUp(self):
@@ -53,6 +77,7 @@ class TestClient(unittest.TestCase):
 		self.proto.dataReceived(self.get_handshake(info_hash=self.torrent.info_hash))
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.tr.value(), self.get_handshake(info_hash=self.torrent.info_hash,peer_id=self.client.peer_id))
+		assert_equals(self.proto.peer.peer_id, 'B'*20)
 #		assert_equals(self.proto.state, 'ACTIVE')
 		
 	def get_handshake(self,info_hash=('A'*20), peer_id=('B'*20)):
@@ -110,6 +135,6 @@ class TestClient(unittest.TestCase):
 	
 	def test_store(self):
 		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'my bytes go here')
-		assert_equals(self.client.torrents[self.torrent.info_hash]['pieces'][0], {0:'my bytes go here'})
+		assert_equals(self.client.torrents[self.torrent.info_hash].pieces[0], {0:'my bytes go here'})
 	
 	
