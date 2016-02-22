@@ -10,6 +10,15 @@ from twisted.internet.protocol import Factory
 from twisted.protocols.basic import Int32StringReceiver
 from twisted.internet import reactor
 
+class Peer():
+	
+	def __init__(self, host, port, peer_id=None):
+		self.peer_id = peer_id
+		self.host = host
+		self.port = port
+		self.bitfield = ''
+		choked = True
+		interested = False
 
 class Client():
 
@@ -34,8 +43,7 @@ class Client():
 		self.torrents[torrent.info_hash] = {\
 			'peers': [], \
 			'tracker id': None, \
-			'pieces': {}, 
-			'choked_peers': set()\
+			'pieces': {} \
 		}
 	
 	def get_needed(self,torrent):
@@ -49,7 +57,7 @@ class Client():
 			peer = [str(ord(c)) for c in list(peerlist[start:start+6])]
 			host = ".".join(peer[0:4])
 			port = int(peer[4]) << 8 | int(peer[5])
-			self.torrents[info_hash]['peers'].append({'host':host, 'port':port})
+			self.add_peer(info_hash, host,port)
 		self.logger.info("Torrent state is now %s", str(self.torrents[info_hash]))
 		
 	def store_piece(self,info_hash,index,begin,data):
@@ -57,14 +65,24 @@ class Client():
 		index_entry[begin] = data
 		self.torrents[info_hash]['pieces'][index] = index_entry
 	
-	def choke_peer(self, info_hash, peer):
-		self.torrents[info_hash]['choked_peers'].add(peer)
+	def add_peer(self, info_hash, host, port, peer_id=None):
+		self.torrents[info_hash]['peers'].append(Peer(host,port,peer_id))
+		
+	def get_peer(self, info_hash, peer_id=None, host=None, port=None):
+		for peer in self.torrents[info_hash]['peers']:
+			if peer.peer_id == peer_id or (peer.host == host and peer.port == port):
+				return peer
+		return None
+			
+	def set_choked(self, info_hash, peer,choked):
+		self.get_peer(info_hash, peer_id=peer).choked=choked
 	
 	def unchoke_peer(self, info_hash, peer):
-		try:
-			self.torrents[info_hash]['choked_peers'].remove(peer)
-		except KeyError:
-			pass
+		self.get_peer(info_hash, peer_id=peer).choked=choked
+		
+	def set_interested(self, info_hash, peer, interested):
+		self.get_peer(info_hash, peer_id=peer).interested=interested
+	
 
 	def tracker_event(self, torrent, event=""):
 		tracker = torrent.announce
@@ -100,7 +118,7 @@ class Client():
 
 
 
-class Peer(Int32StringReceiver):
+class PeerConnection(Int32StringReceiver):
 	logger = logging.getLogger('tcpserver')
 	def __init__(self, client):
 		self.state = "HANDSHAKE"
@@ -171,20 +189,37 @@ class Peer(Int32StringReceiver):
 		)
 		self.info_hash = info_hash
 		self.peer_id = peer_id
+		self.client.add_peer(info_hash, self.transport.getPeer().host, self.transport.getPeer().port, peer_id)
+		self.transport.write("".join(['\x13', 'BitTorrent protocol', '\x00'*8, info_hash, self.client.peer_id]))
 		self.state="ACTIVE"
 	
 	def handle_CHOKE(self):
-		self.client.choke_peer(self.info_hash,self.peer_id)
+		self.client.set_choked(self.info_hash,self.peer_id, True)
 	
 	def handle_UNCHOKE(self):
-		self.client.unchoke_peer(self.info_hash,self.peer_id)
+		self.client.set_choked(self.info_hash,self.peer_id, False)
+		
+	def handle_INTERESTED(self):
+		self.client.set_interested(self.info_hash,self.peer_id, True)
+	
+	def handle_NOT_INTERESTED(self):
+		self.client.set_interested(self.info_hash,self.peer_id, False)
+	
+	def handle_KEEPALIVE(self):
+		pass
+		
+	def handle_REQUEST(self,line):
+		pass
+	
+	def handle_BITFIELD(self, line):
+		self.client.get_peer(self.info_hash, peer_id = self.peer_id).bitfield=line
 	
 	def handle_PIECE(self,line):
 		index,begin = struct.unpack('!II',line[:8])
 		block = line[8:]
 		self.logger.debug("Storing %d bytes at chunk %d offset %d",len(block), index,begin)
 		self.client.store_piece(self.info_hash,index,begin,block)
-
+	
 
 class PeerClientFactory(Factory):
 	
@@ -192,5 +227,5 @@ class PeerClientFactory(Factory):
 		self.client = client
 	
 	def buildProtocol(self, addr):
-		return Peer(self.client)
+		return PeerConnection(self.client)
 

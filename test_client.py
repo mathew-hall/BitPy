@@ -7,6 +7,7 @@ import struct
 from twisted.test import proto_helpers
 from nose.tools import assert_equals
 from nose.tools import assert_true
+from nose.tools import assert_false
 
 
 def get_torrent():
@@ -51,10 +52,11 @@ class TestClient(unittest.TestCase):
 		self.proto.makeConnection(self.tr)
 		self.proto.dataReceived(self.get_handshake(info_hash=self.torrent.info_hash))
 		assert_equals(self.proto.connected, 1)
+		assert_equals(self.tr.value(), self.get_handshake(info_hash=self.torrent.info_hash,peer_id=self.client.peer_id))
 #		assert_equals(self.proto.state, 'ACTIVE')
 		
 	def get_handshake(self,info_hash=('A'*20), peer_id=('B'*20)):
-		return "".join(['\x03', 'abc', '\x00'*8, info_hash, peer_id])
+		return "".join(['\x13', 'BitTorrent protocol', '\x00'*8, info_hash, peer_id])
 	
 	def send(self,data):
 		self.proto.dataReceived(struct.pack('!I', len(data)) + data)
@@ -68,16 +70,16 @@ class TestClient(unittest.TestCase):
 		self.send('\x00')
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
-		assert_true('B'*20 in self.client.torrents[self.torrent.info_hash]['choked_peers'])
+		assert_true(self.client.get_peer(self.torrent.info_hash,'B'*20).choked)
 	
 	def test_unchoke(self):
 		self.send('\x00')
-		assert_true('B'*20 in self.client.torrents[self.torrent.info_hash]['choked_peers'])
+		assert_true(self.client.get_peer(self.torrent.info_hash,'B'*20).choked)
 		
 		self.send('\x01')
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
-		assert_true('B'*20 not in self.client.torrents[self.torrent.info_hash]['choked_peers'])
+		assert_false(self.client.get_peer(self.torrent.info_hash,'B'*20).choked)
 		self.send('\x01')
 	
 	def test_interested(self):
@@ -99,7 +101,13 @@ class TestClient(unittest.TestCase):
 		self.send('\x05' + struct.pack('!I', 1234))
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
-		
+	
+	def test_request(self):
+		self.send('\x06' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + '\x00\x00\x00\x01')
+		assert_equals(self.proto.connected, 1)
+		assert_equals(self.proto.state, 'ACTIVE')
+	
+	
 	def test_store(self):
 		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'my bytes go here')
 		assert_equals(self.client.torrents[self.torrent.info_hash]['pieces'][0], {0:'my bytes go here'})
