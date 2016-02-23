@@ -192,6 +192,20 @@ class Client():
 
 
 
+messages = {
+	0:'CHOKE',
+	1:'UNCHOKE',
+	2:'INTERESTED',
+	3:'NOT_INTERESTED',
+	4:'HAVE',
+	5:'BITFIELD',
+	6:'REQUEST',
+	7:'PIECE',
+	8:'CANCEL',
+	9:'PORT'
+}
+
+
 class PeerConnection(Int32StringReceiver):
 	logger = logging.getLogger('tcpserver')
 	def __init__(self, client):
@@ -221,29 +235,12 @@ class PeerConnection(Int32StringReceiver):
 		if line == "":
 			return self.handle_KEEPALIVE()
 		message_id = int(ord(line[0]))
-		if message_id == 0:
-			return self.handle_CHOKE()
-		if message_id == 1:
-			return self.handle_UNCHOKE()
-		if message_id == 2:
-			return self.handle_INTERESTED()
-		if message_id == 3:
-			return self.handle_NOT_INTERESTED()
-		if message_id == 4:
-			return self.handle_HAVE(line[1:])
-		if message_id == 5:
-			return self.handle_BITFIELD(line[1:])
-		if message_id == 6:
-			return self.handle_REQUEST(line[1:])
-		if message_id == 7:
-			return self.handle_PIECE(line[1:])
-		if message_id == 8:
-			return self.handle_CANCEL(line[1:])
-		if message_id == 9:
-			return self.handle_PORT()
-		else:
+		if message_id not in messages:
 			self.logger.info("Unsupported message %d received from peer %s", message_id, self.transport.getPeer())
-			self.abortConnection()
+		handler = getattr(self, "handle_%s"%messages[message_id])
+		return handler(line[1:])
+		
+			
 			
 	def handle_KEEPALIVE(self):
 		pass
@@ -276,25 +273,25 @@ class PeerConnection(Int32StringReceiver):
 		self.send_HANDSHAKE(info_hash)
 		self.state="ACTIVE"
 	
-	def handle_CHOKE(self):
+	def handle_CHOKE(self,line):
 		self.peer.choked = True
 		
 	def send_CHOKE(self):
 		self.sendString('\x00')
 	
-	def handle_UNCHOKE(self):
+	def handle_UNCHOKE(self,line):
 		self.peer.choked = False
 		
 	def send_UNCHOKE(self):
 		self.sendString('\x01')
 		
-	def handle_INTERESTED(self):
+	def handle_INTERESTED(self,line):
 		self.peer.interested=True
 	
 	def send_INTERESTED(self):
 		self.sendString('\x02')
 	
-	def handle_NOT_INTERESTED(self):
+	def handle_NOT_INTERESTED(self,line):
 		self.peer.interested=False
 	
 	def send_NOT_INTERESTED(self):
