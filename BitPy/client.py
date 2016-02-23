@@ -267,8 +267,11 @@ class PeerConnection(Int32StringReceiver):
 			repr(peer_id)\
 		)
 		self.info_hash = info_hash
+		self.download = self.client.torrents[info_hash]
 		self.peer = self.client.add_peer(info_hash, self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
 		self.send_HANDSHAKE(info_hash)
+		if self.download.get_progress() != 0:
+			self.send_BITFIELD(self.download.get_bitfield())
 		
 		self.state="ACTIVE"
 	
@@ -313,13 +316,13 @@ class PeerConnection(Int32StringReceiver):
 		self.peer.set_bitfield(line)
 	
 	def send_BITFIELD(self, bits):
-		self.sendString('\x05' + self.client.torrents[self.inf_hash].get_bitfield())
+		self.sendString('\x05' + self.download.get_bitfield())
 	
 	def handle_PIECE(self,line):
 		index,begin = struct.unpack('!II',line[:8])
 		block = line[8:]
 		self.logger.debug("Storing %d bytes at chunk %d offset %d",len(block), index,begin)
-		self.client.torrents[self.info_hash].store_piece(index,begin,block)
+		self.download.store_piece(index,begin,block)
 		
 	def send_PIECE(self, index, begin, block):
 		self.sendString('\x07' + struct.pack('!II', index,begin) + block)
