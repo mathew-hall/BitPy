@@ -131,11 +131,6 @@ class Client():
 			port = int(peer[4]) << 8 | int(peer[5])
 			self.add_peer(info_hash, host,port)
 		self.logger.info("Torrent state is now %s", str(self.torrents[info_hash]))
-		
-	def store_piece(self,info_hash,index,begin,data):
-		index_entry = self.torrents[info_hash].pieces.get(index,{})
-		index_entry[begin] = data
-		self.torrents[info_hash].pieces[index] = index_entry
 	
 	def add_peer(self, info_hash, host, port, peer_id=None, connection=None):
 		peer = self.get_peer(info_hash, host=host, port=port, peer_id=peer_id)
@@ -320,7 +315,7 @@ class PeerConnection(Int32StringReceiver):
 		index,begin = struct.unpack('!II',line[:8])
 		block = line[8:]
 		self.logger.debug("Storing %d bytes at chunk %d offset %d",len(block), index,begin)
-		self.client.store_piece(self.info_hash,index,begin,block)
+		self.client.torrents[self.info_hash].store_piece(index,begin,block)
 		
 	def send_PIECE(self, index, begin, block):
 		self.sendString('\x07' + struct.pack('!II', index,begin) + block)

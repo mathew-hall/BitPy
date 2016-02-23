@@ -140,7 +140,8 @@ class TestClient(unittest.TestCase):
 	
 	
 	def test_store(self):
-		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'my bytes go here')
-		assert_equals(self.client.torrents[self.torrent.info_hash].pieces[0], {0:'my bytes go here'})
+		self.torrent.info.piece_length = 25
+		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*20)
+		assert_equals(self.client.torrents[self.torrent.info_hash].pieces[0][:20], list('a'*20))
 	
 	
