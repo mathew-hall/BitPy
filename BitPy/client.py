@@ -38,6 +38,9 @@ class Download():
 				self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
 		return bitfield
 		
+	def get_progress(self):
+		pieces = len(self.torrent.info.pieces)
+		return len(self.pieces)/float(pieces)
 		
 	def piece_progress(self, index):
 		piece_size = self.torrent.info.piece_length
@@ -266,6 +269,7 @@ class PeerConnection(Int32StringReceiver):
 		self.info_hash = info_hash
 		self.peer = self.client.add_peer(info_hash, self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
 		self.send_HANDSHAKE(info_hash)
+		
 		self.state="ACTIVE"
 	
 	def handle_CHOKE(self,line):
@@ -309,7 +313,7 @@ class PeerConnection(Int32StringReceiver):
 		self.peer.set_bitfield(line)
 	
 	def send_BITFIELD(self, bits):
-		self.sendString('\x05' + bits)
+		self.sendString('\x05' + self.client.torrents[self.inf_hash].get_bitfield())
 	
 	def handle_PIECE(self,line):
 		index,begin = struct.unpack('!II',line[:8])

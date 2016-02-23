@@ -68,6 +68,15 @@ class TestDownload(unittest.TestCase):
 		assert_equals(self.download.get_bitfield(),['\x00'])
 		self.download.store_piece(0,0,'a'*10)
 		assert_equals(self.download.get_bitfield(), [chr(0b10000000)])
+		
+	def test_progress(self):
+		self.torrent.info.pieces = ['a'*20, 'b'*20]
+		self.torrent.info_piece_length=5
+		assert_equals(self.download.get_progress(),0)
+		self.download.store_piece(0,0,'a'*5)
+		assert_equals(self.download.get_progress(),0.5)
+		self.download.store_piece(1,0,'a'*5)
+		assert_equals(self.download.get_progress(),1)
 
 class TestClient(unittest.TestCase):
 	def setUp(self):
