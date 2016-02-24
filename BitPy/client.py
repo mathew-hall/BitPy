@@ -114,13 +114,15 @@ class Client():
 		self.connected_peers = []
 		self.torrent = torrent
 		self.download = Download(torrent)
+		self.port = 8123
+		self.tracker_id = None
 
 	
 	def listen_for_connections(self):
-		reactor.listenTCP(8123, PeerClientFactory(self))
+		return reactor.listenTCP(self.port, PeerClientFactory(self))
 	
 	def connect_peer(self, peer):
-		reactor.connectTCP(peer.host, peer.port, PeerClientFactory(self))
+		return reactor.connectTCP(peer.host, peer.port, PeerClientFactory(self))
 		
 	def get_needed(self):
 		return 0
@@ -160,7 +162,7 @@ class Client():
 		params={\
 			'info_hash':self.torrent.info_hash, \
 			'peer_id':self.peer_id, \
-			'port': self.server.server_address[1], \
+			'port': self.port, \
 			'uploaded': self.uploaded, \
 			'downloaded': self.downloaded, \
 			'compact': 1, \

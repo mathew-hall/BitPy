@@ -1,3 +1,5 @@
+from nose.twistedtools import reactor, deferred
+import nose.twistedtools
 import BitPy.client
 import BitPy.torrents
 import logging
@@ -9,9 +11,9 @@ from nose.tools import assert_equals
 from nose.tools import assert_true
 from nose.tools import assert_false
 
-from twisted.internet import reactor
 from twisted.internet.protocol import Factory, Protocol
 from twisted.internet.endpoints import TCP4ClientEndpoint
+from twisted.internet import defer
 
 
 def get_torrent():
@@ -24,7 +26,7 @@ class TestTracker():
 	def test_client_generates_peer_id(self):
 		assert_equals(len(self.client.peer_id), 20)
 	
-	def xtest_client_pings_tracker(self):
+	def test_client_pings_tracker(self):
 		res = self.client.tracker_event()
 		assert_true('failure reason' not in res)
 		assert_true('warning message' not in res)
@@ -151,12 +153,19 @@ class TestClient(unittest.TestCase):
 		assert_equals(self.client.download.pieces[0][:20], list('a'*20))
 	
 class TestRemote():
+	@deferred()
 	def xtest_connect_to_transmission(self):
 		import logging
 		logging.basicConfig(level=logging.DEBUG)
 		ubuntu = get_torrent()
 		client = BitPy.client.Client(ubuntu)
-		client.add_peer('localhost', 1500)
-		reactor.connectTCP('localhost', 1500, BitPy.client.PeerClientFactory(client,ubuntu.info_hash))
-		reactor.run()
+		peer = client.add_peer('localhost', 1500)
+		client.connect_peer(peer)
+		d = defer.Deferred()
+		def check_bitfield(d):
+			assert_true(any([x>0 for x in peer.bitfield]))
+		reactor.callLater(1, d.callback,'f')
+		d.addCallback(check_bitfield)
+		return d
+		#reactor.run()
 		
