@@ -137,11 +137,9 @@ class TestClient(unittest.TestCase):
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
 		
-	def test_have(self):
-		self.send('\x05' + struct.pack('!I', 1234))
-		assert_equals(self.proto.connected, 1)
-		assert_equals(self.proto.state, 'ACTIVE')
-	
+	def test_bitfield(self):
+		pass
+		
 	def test_request(self):
 		self.send('\x06' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + '\x00\x00\x00\x01')
 		assert_equals(self.proto.connected, 1)

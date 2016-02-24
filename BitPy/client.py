@@ -79,7 +79,7 @@ class Peer():
 		self.peer_id = peer_id
 		self.host = host
 		self.port = port
-		self.bitfield = '\x00' * int(math.ceil(pieces / 8.0))
+		self.bitfield = list('\x00' * int(math.ceil(pieces / 8.0)))
 		self.choked = True
 		self.interested = False
 		self.requests = []
@@ -87,7 +87,7 @@ class Peer():
 	def set_have(self, piece):
 		index = piece // 8
 		bit   = 7 - (piece % 8)
-		self.bitfield[index] = self.bitfield[index] | (1 << bit)
+		self.bitfield[index] = chr(ord(self.bitfield[index]) | (1 << bit))
 		
 	def set_bitfield(self, bitfield):
 		self.bitfield = list(bitfield)
@@ -312,7 +312,8 @@ class PeerConnection(Int32StringReceiver):
 		self.sendString('\x04' + struct.pack('!I', piece))
 	
 	def handle_HAVE(self,line):
-		index = struct.unpack('!I', line)
+		self.logger.debug("Got HAVE message %s", repr(line))
+		index, = struct.unpack('!I', line)
 		self.peer.set_have(index)
 
 	def handle_REQUEST(self,line):
