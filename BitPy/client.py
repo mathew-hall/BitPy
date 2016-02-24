@@ -103,69 +103,62 @@ class Client():
 	logger = logging.getLogger('client')
 	
 	
-	def __init__(self, wanted = None):
+	def __init__(self, torrent):
+		#TODO: add scrape to reactor
 		self.uploaded = 0
 		self.downloaded = 0
-		self.peers_wanted = wanted or 10
+		self.peers_wanted = 20
 		self.peer_id = ''.join(chr(random.randint(0,255)) for _ in range(20))
 		self.key = ''.join(chr(random.randint(0,255)) for _ in range(20))
-		self.torrents = {}
+		self.peers = []
+		self.connected_peers = []
+		self.torrent = torrent
+		self.download = Download(torrent)
 
 	
-	def listen_for_torrent(self,info_hash):
-		reactor.listenTCP(8123, PeerClientFactory(self,info_hash))
+	def listen_for_connections(self):
+		reactor.listenTCP(8123, PeerClientFactory(self))
 	
-	
-	def add_torrent(self,torrent):
-		self.torrents[torrent.info_hash] = Download(torrent)
-
-	
-	def get_needed(self,torrent):
+	def connect_peer(self, peer):
+		reactor.connectTCP(peer.host, peer.port, PeerClientFactory(self))
+		
+	def get_needed(self):
 		return 0
 	
-	def handle_tracker_response(self,info_hash,message):
+	def handle_tracker_response(self,message):
 		self.logger.info("Tracker state update for %s",str(message))
-		self.torrents[info_hash].tracker_id = message.get('tracker id',None)
+		self.tracker_id = message.get('tracker id',None)
 		peerlist = message.get('peers',"")
 		for start in xrange(0,len(peerlist),6):
 			peer = [str(ord(c)) for c in list(peerlist[start:start+6])]
 			host = ".".join(peer[0:4])
 			port = int(peer[4]) << 8 | int(peer[5])
-			self.add_peer(info_hash, host,port)
-		self.logger.info("Torrent state is now %s", str(self.torrents[info_hash]))
+			self.add_peer(host,port)
+		self.logger.info("Torrent state is now %s", str(self.torrent))
 	
-	def add_peer(self, info_hash, host, port, peer_id=None, connection=None):
-		peer = self.get_peer(info_hash, host=host, port=port, peer_id=peer_id)
+	def add_peer(self, host, port, peer_id=None, connection=None):
+		peer = self.get_peer(host=host, port=port, peer_id=peer_id)
 		if peer is None:
-			peer = Peer(host,port,peer_id,len(self.torrents[info_hash].torrent.info.pieces))
-			self.torrents[info_hash].peers.append(peer)
+			peer = Peer(host,port,peer_id,len(self.torrent.info.pieces))
+			self.peers.append(peer)
 		if connection:
 			peer.connection = connection
-			self.torrents[info_hash].connected_peers.append(peer)
+			self.connected_peers.append(peer)
 		if peer_id is not None and (peer.peer_id != peer_id):
 			self.logger.warn("Peer %s has changed IDs to %s",repr(peer), repr(peer_id))
 			
 		return peer
 		
-	def get_peer(self, info_hash, peer_id=None, host=None, port=None):
-		for peer in self.torrents[info_hash].peers:
+	def get_peer(self, peer_id=None, host=None, port=None):
+		for peer in self.peers:
 			if (peer_id is not None and peer.peer_id == peer_id) or (peer.host == host and peer.port == port):
 				return peer
 		return None
-		
-	
-	def connect_peer(self, peer):
-		reactor.connectTCP(peer.host, peer.port, PeerClientFactory(self))
-		reactor.run()
-		
-		
-			
 
-
-	def tracker_event(self, torrent, event=""):
-		tracker = torrent.announce
+	def tracker_event(self, event=""):
+		tracker = self.torrent.announce
 		params={\
-			'info_hash':torrent.info_hash, \
+			'info_hash':self.torrent.info_hash, \
 			'peer_id':self.peer_id, \
 			'port': self.server.server_address[1], \
 			'uploaded': self.uploaded, \
@@ -175,12 +168,10 @@ class Client():
 			'key': self.key.encode("hex") \
 		}
 		
-		params['left'] = self.get_needed(torrent.info_hash)
+		params['left'] = self.get_needed()
 		
-		if torrent in self.torrents:
-			tracker_id = self.torrents[torrent.info_hash].get('tracker id')
-			if tracker_id:
-				params['trackerid'] = tracker_id
+		if self.tracker_id:
+			params['trackerid'] = self.tracker_id
 		if event:
 			params['event'] = event
 		
@@ -212,15 +203,14 @@ messages = {
 
 class PeerConnection(Int32StringReceiver):
 	logger = logging.getLogger('tcpserver')
-	def __init__(self, client, info_hash):
+	def __init__(self, client):
 		self.state = "HANDSHAKE"
 		self.preamble_size = 0
 		self.client = client
-		self.info_hash = info_hash
 		self.peer = None
 		
 	def connectionMade(self):
-		self.send_HANDSHAKE(self.info_hash)
+		self.send_HANDSHAKE()
 	
 	def dataReceived(self, recd):
 		if self.state == "HANDSHAKE":
@@ -256,8 +246,8 @@ class PeerConnection(Int32StringReceiver):
 	def send_KEEPALIVE(self):
 		self.sendString("")	
 	
-	def send_HANDSHAKE(self, info_hash):
-		self.transport.write("".join(['\x13', 'BitTorrent protocol', '\x00'*8, info_hash, self.client.peer_id]))
+	def send_HANDSHAKE(self):
+		self.transport.write("".join(['\x13', 'BitTorrent protocol', '\x00'*8, self.client.torrent.info_hash, self.client.peer_id]))
 	
 	def handle_HANDSHAKE(self, instream):
 		pstrlen = ord(instream[0])
@@ -277,10 +267,9 @@ class PeerConnection(Int32StringReceiver):
 			repr(peer_id)\
 		)
 		self.info_hash = info_hash
-		self.download = self.client.torrents[info_hash]
-		self.peer = self.client.add_peer(info_hash, self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
-		if self.download.get_progress() != 0:
-			self.send_BITFIELD(self.download.get_bitfield())
+		self.peer = self.client.add_peer(self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
+		if self.client.download.get_progress() != 0:
+			self.send_BITFIELD(self.client.download.get_bitfield())
 		
 		self.state="ACTIVE"
 	
@@ -332,7 +321,7 @@ class PeerConnection(Int32StringReceiver):
 		index,begin = struct.unpack('!II',line[:8])
 		block = line[8:]
 		self.logger.debug("Storing %d bytes at chunk %d offset %d",len(block), index,begin)
-		self.download.store_piece(index,begin,block)
+		self.client.download.store_piece(index,begin,block)
 		
 	def send_PIECE(self, index, begin, block):
 		self.sendString('\x07' + struct.pack('!II', index,begin) + block)
@@ -341,9 +330,8 @@ class PeerConnection(Int32StringReceiver):
 class PeerClientFactory(Factory):
 	
 	
-	def __init__(self,client,hash):
+	def __init__(self,client):
 		self.client = client
-		self.info_hash = hash
 		
 	def startedConnecting(self, connector):
 			print 'Started to connect.'
@@ -355,5 +343,5 @@ class PeerClientFactory(Factory):
 		pass
 	
 	def buildProtocol(self, addr):
-		return PeerConnection(self.client, self.info_hash)
+		return PeerConnection(self.client)
 

@@ -16,32 +16,27 @@ from twisted.internet.endpoints import TCP4ClientEndpoint
 
 def get_torrent():
 	return BitPy.torrents.load_torrent_file("ubuntu-15.10-desktop-amd64.iso.torrent")
-
-def test_client_generates_peer_id():
-	client = BitPy.client.Client()
-	assert_equals(len(client.peer_id), 20)
+class TestTracker():
+	def setUp(self):
+		self.torrent = get_torrent()
+		self.client = BitPy.client.Client(self.torrent)
+		
+	def test_client_generates_peer_id(self):
+		assert_equals(len(self.client.peer_id), 20)
 	
-def xtest_client_pings_tracker():
-	client = BitPy.client.Client()
-	torrent = get_torrent()
-	res = client.tracker_event(torrent)
-	assert_true('failure reason' not in res)
-	assert_true('warning message' not in res)
+	def xtest_client_pings_tracker(self):
+		res = self.client.tracker_event()
+		assert_true('failure reason' not in res)
+		assert_true('warning message' not in res)
 
-def test_client_updates_tracker_id():
-	client = BitPy.client.Client()
-	torrent = get_torrent()
-	client.add_torrent(torrent)
-	client.handle_tracker_response(torrent.info_hash,{'tracker id':'dead beef face', 'info hash':torrent.info_hash})
-	assert_equals(client.torrents[torrent.info_hash].tracker_id, 'dead beef face')
+	def test_client_updates_tracker_id(self):
+		self.client.handle_tracker_response({'tracker id':'dead beef face', 'info hash':self.torrent.info_hash})
+		assert_equals(self.client.tracker_id, 'dead beef face')
 	
-def test_client_updates_peer_list():
-	client = BitPy.client.Client()
-	torrent = get_torrent()
-	client.add_torrent(torrent)
-	response = {u'peers': u"\xcaSm\xcd\xd5\x80.\xa0\x04p\xc8\xd5\xd5\xde\x96\xb2l\xcfU_\xb8\xc6\x1bE_\x18\xb5\xdb\x96'l=\xaal\x1a\xe2b\xf6\xec\xa5\xa7\xe1\xc6\x1bU\x8b\xd9 O!\xc9\xcf\x12n\xc2\xe2\x9b\t\xde\xa7", u'interval': 1800, u'complete': 3837, u'incomplete': 98}
-	client.handle_tracker_response(torrent.info_hash,response)
-	assert_equals(len(client.torrents[torrent.info_hash].peers), 10)
+	def test_client_updates_peer_list(self):
+		response = {u'peers': u"\xcaSm\xcd\xd5\x80.\xa0\x04p\xc8\xd5\xd5\xde\x96\xb2l\xcfU_\xb8\xc6\x1bE_\x18\xb5\xdb\x96'l=\xaal\x1a\xe2b\xf6\xec\xa5\xa7\xe1\xc6\x1bU\x8b\xd9 O!\xc9\xcf\x12n\xc2\xe2\x9b\t\xde\xa7", u'interval': 1800, u'complete': 3837, u'incomplete': 98}
+		self.client.handle_tracker_response(response)
+		assert_equals(len(self.client.peers), 10)
 
 
 class TestDownload(unittest.TestCase):
@@ -84,10 +79,10 @@ class TestDownload(unittest.TestCase):
 
 class TestClient(unittest.TestCase):
 	def setUp(self):
-		self.client = BitPy.client.Client()
 		self.torrent = get_torrent()
-		self.client.add_torrent(self.torrent)
-		factory = BitPy.client.PeerClientFactory(self.client,self.torrent.info_hash)
+		self.client = BitPy.client.Client(self.torrent)
+
+		factory = BitPy.client.PeerClientFactory(self.client)
 		
 		self.proto = factory.buildProtocol(('127.0.0.1', 0))
 		self.tr = proto_helpers.StringTransport()
@@ -114,16 +109,16 @@ class TestClient(unittest.TestCase):
 		self.send('\x00')
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
-		assert_true(self.client.get_peer(self.torrent.info_hash,'B'*20).choked)
+		assert_true(self.client.get_peer('B'*20).choked)
 	
 	def test_unchoke(self):
 		self.send('\x00')
-		assert_true(self.client.get_peer(self.torrent.info_hash,'B'*20).choked)
+		assert_true(self.client.get_peer('B'*20).choked)
 		
 		self.send('\x01')
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
-		assert_false(self.client.get_peer(self.torrent.info_hash,'B'*20).choked)
+		assert_false(self.client.get_peer('B'*20).choked)
 		self.send('\x01')
 	
 	def test_interested(self):
@@ -153,16 +148,15 @@ class TestClient(unittest.TestCase):
 	def test_store(self):
 		self.torrent.info.piece_length = 25
 		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*20)
-		assert_equals(self.client.torrents[self.torrent.info_hash].pieces[0][:20], list('a'*20))
+		assert_equals(self.client.download.pieces[0][:20], list('a'*20))
 	
 class TestRemote():
-	def test_connect_to_transmission(self):
+	def xtest_connect_to_transmission(self):
 		import logging
 		logging.basicConfig(level=logging.DEBUG)
-		client = BitPy.client.Client()
 		ubuntu = get_torrent()
-		client.add_torrent(ubuntu)
-		client.add_peer(ubuntu.info_hash, 'localhost', 1500)
+		client = BitPy.client.Client(ubuntu)
+		client.add_peer('localhost', 1500)
 		reactor.connectTCP('localhost', 1500, BitPy.client.PeerClientFactory(client,ubuntu.info_hash))
 		reactor.run()
 		
