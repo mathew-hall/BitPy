@@ -112,9 +112,8 @@ class Client():
 		self.torrents = {}
 
 	
-	def start(self):
-		reactor.listenTCP(8123, PeerClientFactory(self))
-		reactor.run()
+	def listen_for_torrent(self,info_hash):
+		reactor.listenTCP(8123, PeerClientFactory(self,info_hash))
 	
 	
 	def add_torrent(self,torrent):
@@ -153,6 +152,13 @@ class Client():
 			if (peer_id is not None and peer.peer_id == peer_id) or (peer.host == host and peer.port == port):
 				return peer
 		return None
+		
+	
+	def connect_peer(self, peer):
+		reactor.connectTCP(peer.host, peer.port, PeerClientFactory(self))
+		reactor.run()
+		
+		
 			
 
 
@@ -206,11 +212,15 @@ messages = {
 
 class PeerConnection(Int32StringReceiver):
 	logger = logging.getLogger('tcpserver')
-	def __init__(self, client):
+	def __init__(self, client, info_hash):
 		self.state = "HANDSHAKE"
 		self.preamble_size = 0
 		self.client = client
+		self.info_hash = info_hash
 		self.peer = None
+		
+	def connectionMade(self):
+		self.send_HANDSHAKE(self.info_hash)
 	
 	def dataReceived(self, recd):
 		if self.state == "HANDSHAKE":
@@ -269,7 +279,6 @@ class PeerConnection(Int32StringReceiver):
 		self.info_hash = info_hash
 		self.download = self.client.torrents[info_hash]
 		self.peer = self.client.add_peer(info_hash, self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
-		self.send_HANDSHAKE(info_hash)
 		if self.download.get_progress() != 0:
 			self.send_BITFIELD(self.download.get_bitfield())
 		
@@ -330,9 +339,20 @@ class PeerConnection(Int32StringReceiver):
 
 class PeerClientFactory(Factory):
 	
-	def __init__(self,client):
+	
+	def __init__(self,client,hash):
 		self.client = client
+		self.info_hash = hash
+		
+	def startedConnecting(self, connector):
+			print 'Started to connect.'
+	
+	def clientConnectionLost(self,reason,_):
+		pass
+	
+	def clientConnectionFailed(self,reason,_):
+		pass
 	
 	def buildProtocol(self, addr):
-		return PeerConnection(self.client)
+		return PeerConnection(self.client, self.info_hash)
 

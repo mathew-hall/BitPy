@@ -83,7 +83,7 @@ class TestClient(unittest.TestCase):
 		self.client = BitPy.client.Client()
 		self.torrent = get_torrent()
 		self.client.add_torrent(self.torrent)
-		factory = BitPy.client.PeerClientFactory(self.client)
+		factory = BitPy.client.PeerClientFactory(self.client,self.torrent.info_hash)
 		
 		self.proto = factory.buildProtocol(('127.0.0.1', 0))
 		self.tr = proto_helpers.StringTransport()
