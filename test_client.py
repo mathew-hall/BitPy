@@ -86,6 +86,14 @@ class TestDownload(unittest.TestCase):
 		self.download.store_piece(0,0,'a'*10)
 		assert_equals(self.download.get_bitfield(), [chr(0b10000000)])
 		
+	def test_verify_piece(self):
+		self.torrent.info.pieces = ['3495ff69d34671d1e15b33a63c1379fdedd3a32a'.decode('hex')]
+		self.torrent.info.piece_length = 10
+		self.download.store_piece(0,0,'a'*10)
+		assert_true(self.download.have_piece(0))
+		self.torrent.info.pieces = ['a'*20]
+		assert_false(self.download.have_piece(0))
+		
 	def test_progress(self):
 		self.torrent.info.pieces = ['a'*20, 'b'*20]
 		self.torrent.info_piece_length=5

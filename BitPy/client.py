@@ -40,6 +40,16 @@ class Download():
 	def get_progress(self):
 		pieces = len(self.torrent.info.pieces)
 		return len(self.pieces)/float(pieces)
+	
+	def get_piece(self,index,start=None, end=None):
+		return "".join(self.pieces[index])
+		
+	def have_piece(self, index):
+		if self.piece_progress(index) != 1: return False
+		piece = self.get_piece(index)
+		sha1 = hashlib.sha1()
+		sha1.update(piece)
+		return sha1.digest() == self.torrent.info.pieces[index]
 		
 	def piece_progress(self, index):
 		piece_size = self.torrent.info.piece_length
