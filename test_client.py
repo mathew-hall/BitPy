@@ -1,8 +1,10 @@
+import mock
 from nose.twistedtools import reactor, deferred
 import nose.twistedtools
 import BitPy.client
 import BitPy.torrents
 import logging
+
 
 import unittest
 import struct
@@ -40,6 +42,20 @@ class TestTracker():
 		self.client.handle_tracker_response(response)
 		assert_equals(len(self.client.peers), 10)
 
+class TestClientBeaviour(unittest.TestCase):
+	def setUp(self):
+		self.torrent = get_torrent()
+		self.client = BitPy.client.Client(self.torrent)
+		response = {u'peers': u"\xcaSm\xcd\xd5\x80.\xa0\x04p\xc8\xd5\xd5\xde\x96\xb2l\xcfU_\xb8\xc6\x1bE_\x18\xb5\xdb\x96'l=\xaal\x1a\xe2b\xf6\xec\xa5\xa7\xe1\xc6\x1bU\x8b\xd9 O!\xc9\xcf\x12n\xc2\xe2\x9b\t\xde\xa7", u'interval': 1800, u'complete': 3837, u'incomplete': 98}
+		self.client.handle_tracker_response(response)
+		self.client.peers_wanted=5
+		
+	@mock.patch('BitPy.client.Client.connect_peer')
+	def test_client_connects_to_peers(self,mock):
+		self.client.check_peers()
+		assert_true(mock.called)
+		
+		
 
 class TestDownload(unittest.TestCase):
 	def setUp(self):
@@ -164,7 +180,7 @@ class TestRemote():
 		d = defer.Deferred()
 		def check_bitfield(d):
 			assert_true(any([x>0 for x in peer.bitfield]))
-		reactor.callLater(1, d.callback,'f')
+		reactor.callLater(10, d.callback,'f')
 		d.addCallback(check_bitfield)
 		return d
 		#reactor.run()

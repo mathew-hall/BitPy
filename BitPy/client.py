@@ -1,11 +1,10 @@
 import random
-import SocketServer
 import requests
 import bencode
 import logging
-import StringIO
 import struct
 import math
+import hashlib
 
 from twisted.internet.protocol import Factory
 from twisted.protocols.basic import Int32StringReceiver
@@ -117,6 +116,9 @@ class Client():
 		self.port = 8123
 		self.tracker_id = None
 
+	def check_peers(self):
+		for i in range(0,self.peers_wanted - len(self.connected_peers)):
+			self.connect_peer(self.peers[i])
 	
 	def listen_for_connections(self):
 		return reactor.listenTCP(self.port, PeerClientFactory(self))
