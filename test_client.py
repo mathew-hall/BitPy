@@ -9,6 +9,10 @@ from nose.tools import assert_equals
 from nose.tools import assert_true
 from nose.tools import assert_false
 
+from twisted.internet import reactor
+from twisted.internet.protocol import Factory, Protocol
+from twisted.internet.endpoints import TCP4ClientEndpoint
+
 
 def get_torrent():
 	return BitPy.torrents.load_torrent_file("ubuntu-15.10-desktop-amd64.iso.torrent")
@@ -151,4 +155,14 @@ class TestClient(unittest.TestCase):
 		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*20)
 		assert_equals(self.client.torrents[self.torrent.info_hash].pieces[0][:20], list('a'*20))
 	
-	
+class TestRemote():
+	def test_connect_to_transmission(self):
+		import logging
+		logging.basicConfig(level=logging.DEBUG)
+		client = BitPy.client.Client()
+		ubuntu = get_torrent()
+		client.add_torrent(ubuntu)
+		client.add_peer(ubuntu.info_hash, 'localhost', 1500)
+		reactor.connectTCP('localhost', 1500, BitPy.client.PeerClientFactory(client,ubuntu.info_hash))
+		reactor.run()
+		
