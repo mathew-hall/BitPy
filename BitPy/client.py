@@ -82,6 +82,9 @@ class Download():
 		self.logger.debug("State is %s", state)
 		
 		self.piece_state[index] = state
+		
+	def get_missing_pieces(self):
+		return [piece for piece in xrange(0,len(self.torrent.info.pieces)) if not self.have_piece(piece)]
 
 class Peer():
 	def __init__(self, host, port, peer_id=None, pieces=0):

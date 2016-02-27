@@ -102,6 +102,13 @@ class TestDownload(unittest.TestCase):
 		assert_equals(self.download.get_progress(),0.5)
 		self.download.store_piece(1,0,'a'*5)
 		assert_equals(self.download.get_progress(),1)
+	
+	def test_missing_pieces(self):
+		self.torrent.info.pieces = ['3495ff69d34671d1e15b33a63c1379fdedd3a32a'.decode('hex') for _ in range(0,3)]
+		self.torrent.info.piece_length=10
+		assert_equals(self.download.get_missing_pieces(), [0,1,2])
+		self.download.store_piece(0,0,'a'*10)
+		assert_equals(self.download.get_missing_pieces(), [1,2])
 
 class TestClient(unittest.TestCase):
 	def setUp(self):
