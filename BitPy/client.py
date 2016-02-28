@@ -168,9 +168,10 @@ class Client():
 			for request in peer.requests:
 				self.handle_request(request)
 		# Do we have any pieces thy don't?
-		my_pieces = self.download.get_bitfield()
-#		for peer in self.connected_peers:
-			
+		for peer in self.connected_peers:
+			#Note: we should be smarter about this.
+			piece = list(get_pieces_to_send(peer))[0]
+			peer.connection.send_PIECE(piece, 0, self.download.get_piece(piece,begin))
 			
 			
 		
