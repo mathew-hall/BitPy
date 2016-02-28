@@ -195,6 +195,14 @@ class TestClient(unittest.TestCase):
 		self.client.handle_request(peer, peer.requests[0])
 		response = '\07'+struct.pack('!II',0,0)+'a'*10
 		assert_equals(self.tr.value(),struct.pack('!I',len(response)) + response)
+		
+	def test_get_pieces_to_send(self):
+		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*10)
+		self.send('\x07' + '\x00\x00\x00\x01' + '\x00\x00\x00\x00' + 'a'*10)
+		self.send('\x07' + '\x00\x00\x00\x02' + '\x00\x00\x00\x00' + 'a'*10)
+		peer = self.client.connected_peers[0]
+		assert_equals(peer.bitfield,['\x00'])
+		assert_equals(list(self.client.get_pieces_to_send(peer)), [0,1,2])
 	
 class TestRemote():
 	@deferred()

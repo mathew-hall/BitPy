@@ -143,14 +143,35 @@ class Client():
 		piece,begin,length = request
 		if self.download.have_piece(piece):
 			peer.connection.send_PIECE(piece,begin,self.download.get_piece(piece,begin,length))
-			
+	
+	def get_pieces_to_send(self, peer):
+		my_pieces = self.download.get_bitfield()
+		peer_bitfield = peer.bitfield
+		have_need = [ord(mine) & (~ord(theirs)) for (mine,theirs) in zip(my_pieces, peer_bitfield)]
+		self.logger.debug("Computed difference between bitfields as %s", str(have_need))
+		can_send = [(idx,bits) for idx,bits in enumerate(have_need) if bits != 0]
+		self.logger.debug("Can send %s", can_send)
+		for idx,bits in can_send:
+			offset = idx * 8
+			self.logger.debug("Difference for bits: %s", str(bits))
+			for bit in range(0,8):
+				self.logger.debug("For bit %s, and field %s, result is %s %s", bit, bits, (1 << (7-bit)) & bits,  (1 << (7-bit)))
+				if (1 << (7-bit)) & bits:
+					yield offset + bit
+	
 	def tick(self):
 		"""
 		Decide what to do when the Twisted event loop gives us time.
 		"""
+		# Have we been asked for any pieces? Send those first
 		for peer in self.connected_peers:
 			for request in peer.requests:
 				self.handle_request(request)
+		# Do we have any pieces thy don't?
+		my_pieces = self.download.get_bitfield()
+#		for peer in self.connected_peers:
+			
+			
 			
 		
 	def get_needed(self):
