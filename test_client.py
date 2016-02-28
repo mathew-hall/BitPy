@@ -113,8 +113,10 @@ class TestDownload(unittest.TestCase):
 class TestClient(unittest.TestCase):
 	def setUp(self):
 		self.torrent = get_torrent()
+		self.torrent.info.pieces = ['3495ff69d34671d1e15b33a63c1379fdedd3a32a'.decode('hex') for _ in range(0,3)]
+		self.torrent.info.piece_length=10
+		
 		self.client = BitPy.client.Client(self.torrent)
-
 		factory = BitPy.client.PeerClientFactory(self.client)
 		
 		self.proto = factory.buildProtocol(('127.0.0.1', 0))
@@ -125,6 +127,7 @@ class TestClient(unittest.TestCase):
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.tr.value(), self.get_handshake(info_hash=self.torrent.info_hash,peer_id=self.client.peer_id))
 		assert_equals(self.proto.peer.peer_id, 'B'*20)
+		assert_equals(len(self.client.connected_peers),1)
 #		assert_equals(self.proto.state, 'ACTIVE')
 		
 	def get_handshake(self,info_hash=('A'*20), peer_id=('B'*20)):
@@ -165,7 +168,7 @@ class TestClient(unittest.TestCase):
 		assert_equals(self.proto.state, 'ACTIVE')
 	
 	def test_have(self):
-		self.send('\x04' + struct.pack('!I', 1234))
+		self.send('\x04' + struct.pack('!I', 0))
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
 		
@@ -176,12 +179,22 @@ class TestClient(unittest.TestCase):
 		self.send('\x06' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + '\x00\x00\x00\x01')
 		assert_equals(self.proto.connected, 1)
 		assert_equals(self.proto.state, 'ACTIVE')
+		assert_equals(self.client.connected_peers[0].requests[0], (0,0,1))
 	
 	
 	def test_store(self):
 		self.torrent.info.piece_length = 25
 		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*20)
 		assert_equals(self.client.download.pieces[0][:20], list('a'*20))
+		
+	def test_handle_request(self):
+		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*10)
+		self.send('\x06' + struct.pack('!III',0,0,10))
+		peer = self.client.connected_peers[0]
+		self.tr.clear()
+		self.client.handle_request(peer, peer.requests[0])
+		response = '\07'+struct.pack('!II',0,0)+'a'*10
+		assert_equals(self.tr.value(),struct.pack('!I',len(response)) + response)
 	
 class TestRemote():
 	@deferred()

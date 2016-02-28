@@ -41,7 +41,7 @@ class Download():
 		pieces = len(self.torrent.info.pieces)
 		return len(self.pieces)/float(pieces)
 	
-	def get_piece(self,index,start=None, end=None):
+	def get_piece(self,index,start=None, length=None):
 		return "".join(self.pieces[index])
 		
 	def have_piece(self, index):
@@ -138,6 +138,20 @@ class Client():
 	
 	def connect_peer(self, peer):
 		return reactor.connectTCP(peer.host, peer.port, PeerClientFactory(self))
+		
+	def handle_request(self,peer,request):
+		piece,begin,length = request
+		if self.download.have_piece(piece):
+			peer.connection.send_PIECE(piece,begin,self.download.get_piece(piece,begin,length))
+			
+	def tick(self):
+		"""
+		Decide what to do when the Twisted event loop gives us time.
+		"""
+		for peer in self.connected_peers:
+			for request in peer.requests:
+				self.handle_request(request)
+			
 		
 	def get_needed(self):
 		return 0
@@ -345,7 +359,7 @@ class PeerConnection(Int32StringReceiver):
 	
 
 class PeerClientFactory(Factory):
-	
+	#TODO: notify client on disconnect
 	
 	def __init__(self,client):
 		self.client = client
