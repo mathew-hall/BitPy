@@ -182,7 +182,10 @@ class Client():
 			#Note: we should be smarter about this.
 			piece = list(get_pieces_to_send(peer))[0]
 			peer.connection.send_PIECE(piece, 0, self.download.get_piece(piece,begin))
-			
+		# Do they have any pieces we don't?
+		for peer in self.connected_peers:
+			piece = list(get_pieces_to_request(peer))[0]
+			peer.connection.send_REQUEST(piece, 0, self.torrent.info.piece_length)
 			
 		
 	def get_needed(self):
