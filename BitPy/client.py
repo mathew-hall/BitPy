@@ -143,7 +143,17 @@ class Client():
 		piece,begin,length = request
 		if self.download.have_piece(piece):
 			peer.connection.send_PIECE(piece,begin,self.download.get_piece(piece,begin,length))
-	
+	def get_pieces_to_request(self, peer):
+		my_pieces = self.download.get_bitfield()
+		peer_bitfield = peer.bitfield
+		need_have = [~ord(mine) & ord(theirs) for (mine,theirds) in zip(my_pieces, peer_bitfield)]	
+		can_request = [(idx,bits) for idx,bits in enumerate(need_have) if bits != 0]
+		for idx, bits in can_request:
+			offset = idx * 8
+			for bit in range(0,8):
+				if (1 << (7-bit)) & bits:
+					yield offset + bit
+					
 	def get_pieces_to_send(self, peer):
 		my_pieces = self.download.get_bitfield()
 		peer_bitfield = peer.bitfield
