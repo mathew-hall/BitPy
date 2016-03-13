@@ -1,5 +1,6 @@
 from nose.tools import assert_equals
 from nose.tools import assert_true
+from nose.tools import raises
 import BitPy.bencode
 
 def test_bencode_string():
@@ -39,3 +40,8 @@ def test_bendecode_torrent():
 		result = BitPy.bencode.bendecode(contents)
 		assert_true("announce" in result) 
 		assert_true("info" in result)
+		
+@raises(Exception)
+def test_bendecode_invalid():
+	BitPy.bencode.bendecode("Xinvalid")
+	
