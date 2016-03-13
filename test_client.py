@@ -128,7 +128,7 @@ class TestClient(unittest.TestCase):
 		assert_equals(self.tr.value(), self.get_handshake(info_hash=self.torrent.info_hash,peer_id=self.client.peer_id))
 		assert_equals(self.proto.peer.peer_id, 'B'*20)
 		assert_equals(len(self.client.connected_peers),1)
-#		assert_equals(self.proto.state, 'ACTIVE')
+		assert_equals(self.proto.state, 'ACTIVE')
 		
 	def get_handshake(self,info_hash=('A'*20), peer_id=('B'*20)):
 		return "".join(['\x13', 'BitTorrent protocol', '\x00'*8, info_hash, peer_id])
@@ -173,7 +173,8 @@ class TestClient(unittest.TestCase):
 		assert_equals(self.proto.state, 'ACTIVE')
 		
 	def test_bitfield(self):
-		pass
+		self.send('\x05' + '\xf0')
+		assert_equals(self.proto.peer.bitfield, ['\xf0'])
 		
 	def test_request(self):
 		self.send('\x06' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + '\x00\x00\x00\x01')
