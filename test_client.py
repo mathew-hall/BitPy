@@ -205,6 +205,12 @@ class TestClient(unittest.TestCase):
 		assert_equals(peer.bitfield,['\x00'])
 		assert_equals(list(self.client.get_pieces_to_send(peer)), [0,1,2])
 	
+	def test_get_pieces_to_request(self):
+		peer = self.client.connected_peers[0]
+		[peer.set_have(piece) for piece in range(0,4)]
+		assert_equals(self.client.download.get_bitfield(), ['\x00'])
+		assert_equals(list(self.client.get_pieces_to_request(peer)), [0,1,2,3])
+	
 class TestRemote():
 	@deferred()
 	def xtest_connect_to_transmission(self):
