@@ -1,6 +1,6 @@
 .PHONY: check watch-check deps
 	
-TESTS := nosetests --with-coverage --cover-package=BitPy
+TESTS := nosetests --with-coverage --cover-package=BitPy --with-json-extended
 	
 check:
 	$(TESTS)
