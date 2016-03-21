@@ -38,7 +38,8 @@ class Download():
 				self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
 		return bitfield
 		
-	def get_progress(self):
+	@property
+	def progress(self):
 		pieces = len(self.torrent.info.pieces)
 		return len(self.pieces)/float(pieces)
 	
@@ -83,8 +84,9 @@ class Download():
 		self.logger.debug("State is %s", state)
 		
 		self.piece_state[index] = state
-		
-	def get_missing_pieces(self):
+	
+	@property
+	def missing_pieces(self):
 		return [piece for piece in xrange(0,len(self.torrent.info.pieces)) if not self.have_piece(piece)]
 
 class Peer():
@@ -336,7 +338,7 @@ class PeerConnection(Int32StringReceiver):
 		)
 		self.info_hash = info_hash
 		self.peer = self.client.add_peer(self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
-		if self.client.download.get_progress() != 0:
+		if self.client.download.progress != 0:
 			self.send_BITFIELD(self.client.download.bitfield)
 		
 		self.state="ACTIVE"
