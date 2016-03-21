@@ -1,4 +1,4 @@
-.PHONY: check watch-check
+.PHONY: check watch-check deps
 	
 TESTS := nosetests --with-coverage --cover-package=BitPy
 	
@@ -7,3 +7,6 @@ check:
 	
 watch-check:
 	$(TESTS) --with-watch
+	
+deps:
+	pip install -r requirements.txt --user
