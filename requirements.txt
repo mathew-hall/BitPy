@@ -1,2 +1,5 @@
 requests
 twisted
+nose-watch
+nose-cov
+mock==1.0.1
