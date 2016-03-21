@@ -21,7 +21,8 @@ class Download():
 		self.tracker_id = None
 		self.connected_peers = []
 	
-	def get_bitfield(self):
+	@property
+	def bitfield(self):
 		num_pieces = len(self.torrent.info.pieces)
 		
 		bitfield = list('\x00' * int(math.ceil(num_pieces / 8.0)))
@@ -145,7 +146,7 @@ class Client():
 			peer.connection.send_PIECE(piece,begin,self.download.get_piece(piece,begin,length))
 			
 	def get_pieces_to_request(self, peer):
-		my_pieces = self.download.get_bitfield()
+		my_pieces = self.download.bitfield
 		peer_bitfield = peer.bitfield
 		need_have = [~ord(mine) & ord(theirs) for (mine,theirs) in zip(my_pieces, peer_bitfield)]	
 		can_request = [(idx,bits) for idx,bits in enumerate(need_have) if bits != 0]
@@ -156,7 +157,7 @@ class Client():
 					yield offset + bit
 					
 	def get_pieces_to_send(self, peer):
-		my_pieces = self.download.get_bitfield()
+		my_pieces = self.download.bitfield
 		peer_bitfield = peer.bitfield
 		have_need = [ord(mine) & (~ord(theirs)) for (mine,theirs) in zip(my_pieces, peer_bitfield)]
 		self.logger.debug("Computed difference between bitfields as %s", str(have_need))
@@ -336,7 +337,7 @@ class PeerConnection(Int32StringReceiver):
 		self.info_hash = info_hash
 		self.peer = self.client.add_peer(self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
 		if self.client.download.get_progress() != 0:
-			self.send_BITFIELD(self.client.download.get_bitfield())
+			self.send_BITFIELD(self.client.download.bitfield)
 		
 		self.state="ACTIVE"
 	
@@ -382,7 +383,7 @@ class PeerConnection(Int32StringReceiver):
 		self.peer.set_bitfield(line)
 	
 	def send_BITFIELD(self, bits):
-		self.sendString('\x05' + self.download.get_bitfield())
+		self.sendString('\x05' + self.download.bitfield)
 	
 	def handle_PIECE(self,line):
 		index,begin = struct.unpack('!II',line[:8])

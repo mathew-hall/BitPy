@@ -82,9 +82,9 @@ class TestDownload(unittest.TestCase):
 	def test_bitfield(self):
 		self.torrent.info.pieces = ['\x41'*20, '\x42'*20]
 		self.torrent.info.piece_length=10
-		assert_equals(self.download.get_bitfield(),['\x00'])
+		assert_equals(self.download.bitfield,['\x00'])
 		self.download.store_piece(0,0,'a'*10)
-		assert_equals(self.download.get_bitfield(), [chr(0b10000000)])
+		assert_equals(self.download.bitfield, [chr(0b10000000)])
 		
 	def test_verify_piece(self):
 		self.torrent.info.pieces = ['3495ff69d34671d1e15b33a63c1379fdedd3a32a'.decode('hex')]
@@ -208,7 +208,7 @@ class TestClient(unittest.TestCase):
 	def test_get_pieces_to_request(self):
 		peer = self.client.connected_peers[0]
 		[peer.set_have(piece) for piece in range(0,4)]
-		assert_equals(self.client.download.get_bitfield(), ['\x00'])
+		assert_equals(self.client.download.bitfield, ['\x00'])
 		assert_equals(list(self.client.get_pieces_to_request(peer)), [0,1,2,3])
 	
 class TestRemote():
