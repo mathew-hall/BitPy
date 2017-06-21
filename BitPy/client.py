@@ -157,14 +157,14 @@ class Client():
 		self.tracker_id = None
 
 	def check_peers(self):
-		for i in range(0,self.peers_wanted - len(self.connected_peers)):
+		for i in range(0,min(len(self.peers),self.peers_wanted - len(self.connected_peers))):
 			self.connect_peer(self.peers[i])
 
 	def listen_for_connections(self):
-		return reactor.listenTCP(self.port, PeerClientFactory(self))
+		return reactor.listenTCP(self.port, protocol.PeerClientFactory(self))
 
 	def connect_peer(self, peer):
-		return reactor.connectTCP(peer.host, peer.port, PeerClientFactory(self))
+		return reactor.connectTCP(peer.host, peer.port, protocol.PeerClientFactory(self))
 
 	def handle_request(self,peer,request):
 		piece,begin,length = request
