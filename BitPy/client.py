@@ -247,8 +247,10 @@ class Client():
 		if connection:
 			peer.connection = connection
 			self.connected_peers.append(peer)
-		if peer_id is not None and (peer.peer_id != peer_id):
+		if peer_id is not None and peer.peer_id is not None and (peer.peer_id != peer_id):
 			self.logger.warn("Peer %s has changed IDs to %s",repr(peer), repr(peer_id))
+		elif peer_id is not None and peer.peer_id is None:
+			peer.peer_id = peer_id
 
 		return peer
 
