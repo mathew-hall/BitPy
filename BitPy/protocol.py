@@ -84,6 +84,7 @@ class PeerConnection(Int32StringReceiver):
 		)
 		self.info_hash = info_hash
 		self.peer = self.client.add_peer(self.transport.getPeer().host, self.transport.getPeer().port, peer_id, connection=self)
+		self.peer.choked = True
 		if self.client.download.progress != 0:
 			self.send_BITFIELD(self.client.download.bitfield)
 
@@ -96,6 +97,7 @@ class PeerConnection(Int32StringReceiver):
 		self.sendString('\x00')
 
 	def handle_UNCHOKE(self,line):
+		self.logger.debug("Peer %s is unchoked"%self.peer)
 		self.peer.choked = False
 
 	def send_UNCHOKE(self):
