@@ -31,7 +31,7 @@ class PeerConnection(Int32StringReceiver):
 	def dataReceived(self, recd):
 		if self.state == "HANDSHAKE":
 			self.recvd = self.recvd + recd
-			self.logger.debug("Received data in state %s: %s", self.state, repr(self.recvd))
+			#self.logger.debug("Received data in state %s: %s", self.state, repr(self.recvd))
 			if len(self.recvd) >= 1:
 				if self.preamble_size == 0:
 					pstrlen = ord(self.recvd[0])
@@ -45,7 +45,7 @@ class PeerConnection(Int32StringReceiver):
 			Int32StringReceiver.dataReceived(self,recd)
 
 	def stringReceived(self, line):
-		self.logger.debug("Received message %s", repr(line))
+		#self.logger.debug("Received message %s", repr(line))
 		if line == "":
 			return self.handle_KEEPALIVE()
 		message_id = int(ord(line[0]))
@@ -107,6 +107,7 @@ class PeerConnection(Int32StringReceiver):
 		self.peer.interested=True
 
 	def send_INTERESTED(self):
+		self.logger.debug("Sending Interested to Peer %s"%self.peer)
 		self.sendString('\x02')
 
 	def handle_NOT_INTERESTED(self,line):
@@ -119,7 +120,7 @@ class PeerConnection(Int32StringReceiver):
 		self.sendString('\x04' + struct.pack('!I', piece))
 
 	def handle_HAVE(self,line):
-		self.logger.debug("Got HAVE message %s", repr(line))
+		self.logger.debug("Got HAVE message from peer %s", self.peer)
 		index, = struct.unpack('!I', line)
 		self.peer.set_have(index)
 
@@ -127,6 +128,7 @@ class PeerConnection(Int32StringReceiver):
 		self.peer.add_request(*struct.unpack('!3I',line))
 
 	def send_REQUEST(self,piece,begin,length):
+		self.logger.debug("Asking peer %s for piece %d [%d,%d]",self.peer, piece, begin, length)
 		self.sendString('\x06' + struct.pack('!3I', piece,begin,length))
 
 	def handle_BITFIELD(self, line):
@@ -147,12 +149,12 @@ class PeerConnection(Int32StringReceiver):
 
 class PeerClientFactory(Factory):
 	#TODO: notify client on disconnect
-
+	logger = logging.getLogger('tcpserver')
 	def __init__(self,client):
 		self.client = client
 
 	def startedConnecting(self, connector):
-			print 'Started to connect.'
+		self.logger.info('Started to connect: %s'%repr(connector))
 
 	def clientConnectionLost(self,reason,_):
 		pass
