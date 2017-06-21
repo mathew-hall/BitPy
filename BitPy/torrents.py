@@ -20,8 +20,16 @@ class Info:
 			self.filemode = 'multiple'
 			for filestruct in info_struct['files']:
 				self.add_file(filestruct.path, filestruct.length, filestruct.get('md5sum',None))
-			
-		
+
+	@property
+	def num_pieces(self):
+		return len(self.pieces)
+
+	@property
+	def size(self):
+		return sum([f['length'] for f in self.files])
+
+
 	def add_file(self, path, length, md5sum=None):
 		self.files.append({'path':path,'length':length,'md5sum':md5sum})
 	
