@@ -135,7 +135,8 @@ class Peer():
 		self.requests.append((index,begin,length))
 
 	def __repr__(self):
-		return repr({'peer id': self.peer_id, 'host':self.host, 'port':self.port, 'bitfield': self.bitfield, 'choked':self.choked, 'interested': self.interested})
+		#'bitfield': self.bitfield
+		return repr({'peer id': self.peer_id, 'host':self.host, 'port':self.port, 'choked':self.choked, 'interested': self.interested})
 
 class Client():
 
