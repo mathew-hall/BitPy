@@ -32,15 +32,15 @@ class Download():
 
 		bitfield = list('\x00' * int(math.ceil(num_pieces / 8.0)))
 
-		self.logger.debug("State is %s", repr(self.piece_state))
+		#self.logger.debug("State is %s", repr(self.piece_state))
 
 		for piece,state in self.piece_state.iteritems():
 			if self.piece_progress(piece) == 1:
-				self.logger.debug("Have piece %d",piece)
+				#self.logger.debug("Have piece %d",piece)
 				index = piece // 8
 				bit   = 7 - (piece % 8)
 				bitfield[index] = chr(ord(bitfield[index]) | (1 << bit))
-				self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
+				#self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
 		return bitfield
 
 	@property
@@ -166,7 +166,6 @@ class Client():
 
 
 	def __init__(self, torrent):
-		#TODO: add scrape to reactor
 		self.uploaded = 0
 		self.downloaded = 0
 		self.peers_wanted = 20
@@ -209,14 +208,12 @@ class Client():
 		my_pieces = self.download.bitfield
 		peer_bitfield = peer.bitfield
 		have_need = [ord(mine) & (~ord(theirs)) for (mine,theirs) in zip(my_pieces, peer_bitfield)]
-		self.logger.debug("Computed difference between bitfields as %s", str(have_need))
+
 		can_send = [(idx,bits) for idx,bits in enumerate(have_need) if bits != 0]
-		self.logger.debug("Can send %s", can_send)
+
 		for idx,bits in can_send:
 			offset = idx * 8
-			self.logger.debug("Difference for bits: %s", str(bits))
 			for bit in range(0,8):
-				self.logger.debug("For bit %s, and field %s, result is %s %s", bit, bits, (1 << (7-bit)) & bits,  (1 << (7-bit)))
 				if (1 << (7-bit)) & bits:
 					yield offset + bit
 
