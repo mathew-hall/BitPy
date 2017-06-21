@@ -19,6 +19,12 @@ class Download():
 		self.piece_state = {}
 		self.tracker_id = None
 		self.connected_peers = []
+		self.file = open("torrent.dat", "wb")
+
+		self.file.seek(self.torrent.info.size)
+		self.file.write('\0')
+		self.file.seek(0)
+
 
 	@property
 	def bitfield(self):
@@ -42,8 +48,13 @@ class Download():
 		pieces = len(self.torrent.info.pieces)
 		return len(self.pieces)/float(pieces)
 
-	def get_piece(self,index,start=None, length=None):
-		return "".join(self.pieces[index])
+	def get_piece(self,index,start=0, length=None):
+		if not self.have_piece(index):
+			return None
+		self.seek_block_part(index,start)
+		readsize = length if length else self.piece_size(index)
+		return self.file.read(readsize)
+
 
 	def have_piece(self, index):
 		if self.piece_progress(index) != 1: return False
@@ -53,7 +64,7 @@ class Download():
 		return sha1.digest() == self.torrent.info.pieces[index]
 
 	def piece_progress(self, index):
-		piece_size = self.torrent.info.piece_length
+		piece_size = self.piece_size(index)
 		if index not in self.piece_state:
 			return 0
 
@@ -67,14 +78,20 @@ class Download():
 
 		return (piece_size - missing) / float(piece_size)
 
-	def store_piece(self, index, begin, data):
-		piece_size = self.torrent.info.piece_length
-		data_size = len(data)
-		chunk = self.pieces.get(index, list('\x00' * piece_size))
-		chunk[begin:begin+data_size] = data
-		self.pieces[index] = chunk
+	def seek_block_part(self,piece,offset=0):
+		self.file.seek(piece * self.torrent.info.piece_length + offset)
+		#return mmap.mmap(self.file, self.piece_size(piece), offset=piece * self.torrent.info.piece_length)
 
-		self.logger.debug("Storing %d bytes at %d; chunk is now %s", data_size,begin,chunk)
+	def store_piece(self, index, begin, data):
+
+		data_size = len(data)
+
+		file_offset = index * self.torrent.info.piece_length + begin
+
+		assert file_offset + len(data) <= self.torrent.info.size
+		self.seek_block_part(index,begin)
+		self.file.write(data)
+		self.file.flush()
 
 		state = self.piece_state.get(index, [])
 		state.append((begin, begin+data_size))
@@ -83,6 +100,14 @@ class Download():
 		self.logger.debug("State is %s", state)
 
 		self.piece_state[index] = state
+
+
+
+	def piece_size(self,index):
+		if index < (self.torrent.info.num_pieces - 1):
+			return self.torrent.info.piece_length
+		else:
+			return self.torrent.info.size - self.torrent.info.num_pieces * (self.torrent.info.piece_length - 1)
 
 	@property
 	def missing_pieces(self):
