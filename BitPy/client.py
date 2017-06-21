@@ -6,8 +6,11 @@ import logging
 import math
 import hashlib
 
+import itertools
 
-from twisted.internet import reactor
+from twisted.internet import task,reactor
+
+import protocol
 
 class Download():
 	logger = logging.getLogger(__name__)
