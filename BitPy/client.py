@@ -197,6 +197,15 @@ class Client():
 				if (1 << (7-bit)) & bits:
 					yield offset + bit
 
+	def start(self):
+		self.logger.info("Announcing to tracker")
+		announce = self.tracker_event()
+		self.handle_tracker_response(announce)
+		
+		tick_call = task.LoopingCall(self.tick)
+		tick_call.start(10.0)
+		
+
 	def tick(self):
 		"""
 		Decide what to do when the Twisted event loop gives us time.
