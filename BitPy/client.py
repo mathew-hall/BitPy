@@ -78,6 +78,28 @@ class Download():
 
 		return (piece_size - missing) / float(piece_size)
 
+	def have_piece_range(self,index,start,length):
+		if index not in self.piece_state:
+			return False
+		if length <= 0:
+			return True
+
+		next = 0
+
+		for (s,n) in self.piece_state[index]:
+			if s < next:
+				continue
+			# Start is somewhere in this block,
+			# so we can just advance it to the next point,
+			# reducing length by the amount we skip
+			if start >= s and start <= n:
+				skip = n - start
+				start += skip
+				length -= skip
+			if length <= 0:
+				return True
+			next = n
+
 	def seek_block_part(self,piece,offset=0):
 		self.file.seek(piece * self.torrent.info.piece_length + offset)
 		#return mmap.mmap(self.file, self.piece_size(piece), offset=piece * self.torrent.info.piece_length)
@@ -211,19 +233,42 @@ class Client():
 		"""
 		Decide what to do when the Twisted event loop gives us time.
 		"""
-		# Have we been asked for any pieces? Send those first
+		if len(self.connected_peers) < self.peers_wanted:
+			self.logger.info("Connecting to some peers")
+			self.check_peers()
+			
+		# First see if we can send anything requested:
 		for peer in self.connected_peers:
-			for request in peer.requests:
-				self.handle_request(request)
+			for piece in peer.requests:
+				idx, begin, length = piece
+				if self.download.have_piece(idx):
+					self.logger.debug("Sending piece %s to peer %s"%(piece, peer))
+					peer.connection.send_PIECE(idx,begin, self.download.get_piece(idx,begin,length))
+				
 		# Do we have any pieces thy don't?
 		for peer in self.connected_peers:
 			#Note: we should be smarter about this.
-			piece = list(get_pieces_to_send(peer))[0]
-			peer.connection.send_PIECE(piece, 0, self.download.get_piece(piece,begin))
+			if not peer.choked:
+				pieces_interested = self.get_pieces_to_send(peer)
+				for piece in itertools.islice(pieces_interested,1):
+					self.logger.debug("Sending piece %s to peer %s"%(piece, peer))
+					peer.connection.send_PIECE(piece, 0, self.download.get_piece(piece))
+
+		requests = {}
 		# Do they have any pieces we don't?
 		for peer in self.connected_peers:
-			piece = list(get_pieces_to_request(peer))[0]
-			peer.connection.send_REQUEST(piece, 0, self.torrent.info.piece_length)
+			if peer.choked:
+				continue
+			pieces = self.get_pieces_to_request(peer)
+			for piece in itertools.islice(pieces, 1):
+				peer.connection.send_UNCHOKE()
+				self.logger.debug("Requesting piece %s from peer %s"%(piece,peer))
+				for part in range(0,self.download.piece_size(piece),2**14):
+					if not self.download.have_piece_range(piece,part,2**14):
+						requests[(piece,part)] = peer
+		for (data,peer) in requests.iteritems():
+			piece,part = data
+			peer.connection.send_REQUEST(piece, part, 2**14)
 
 
 	def get_needed(self):
