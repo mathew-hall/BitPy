@@ -6,6 +6,8 @@ import logging
 import math
 import hashlib
 
+import os
+
 import itertools
 
 from twisted.internet import task,reactor
@@ -22,11 +24,20 @@ class Download():
 		self.piece_state = {}
 		self.tracker_id = None
 		self.connected_peers = []
-		self.file = open("torrent.dat", "wb")
+		
+		self.filename = 'torrent.dat'
+		
+		
+		if self.torrent.info.filemode == 'single':
+			self.filename = os.sep.join(self.torrent.info.files[0]['path'])
+			
+		
+		self.file = open(self.filename, "wb")
 
-		self.file.seek(self.torrent.info.size)
-		self.file.write('\0')
-		self.file.seek(0)
+		if os.path.getsize(self.filename) != self.torrent.info.size:
+			self.file.seek(self.torrent.info.size)
+			self.file.write('\0')
+			self.file.seek(0)
 
 
 	@property
