@@ -6,6 +6,8 @@ import logging
 import math
 import hashlib
 
+import bisect
+
 import os
 
 import itertools
@@ -32,7 +34,7 @@ class Download():
 			self.filename = os.sep.join(self.torrent.info.files[0]['path'])
 			
 		
-		self.file = open(self.filename, "wb")
+		self.file = open(self.filename, "r+b")
 
 		if os.path.getsize(self.filename) != self.torrent.info.size:
 			self.file.seek(self.torrent.info.size)
@@ -49,7 +51,7 @@ class Download():
 		#self.logger.debug("State is %s", repr(self.piece_state))
 
 		for piece,state in self.piece_state.iteritems():
-			if self.piece_progress(piece) == 1:
+			if self.have_piece(piece):
 				#self.logger.debug("Have piece %d",piece)
 				index = piece // 8
 				bit   = 7 - (piece % 8)
@@ -63,8 +65,6 @@ class Download():
 		return len(self.pieces)/float(pieces)
 
 	def get_piece(self,index,start=0, length=None):
-		if not self.have_piece(index):
-			return None
 		self.seek_block_part(index,start)
 		readsize = length if length else self.piece_size(index)
 		return self.file.read(readsize)
@@ -75,7 +75,9 @@ class Download():
 		piece = self.get_piece(index)
 		sha1 = hashlib.sha1()
 		sha1.update(piece)
-		return sha1.digest() == self.torrent.info.pieces[index]
+		hash = sha1.digest()
+		self.logger.debug("Checking piece %d %s hash %s against %s"%(index,piece,hash,self.torrent.info.pieces[index]))
+		return hash == self.torrent.info.pieces[index]
 
 	def piece_progress(self, index):
 		piece_size = self.piece_size(index)
@@ -130,8 +132,28 @@ class Download():
 		self.file.flush()
 
 		state = self.piece_state.get(index, [])
-		state.append((begin, begin+data_size))
-		state.sort()
+		
+		inserted = False
+		
+		insert_pos = -1
+		
+		
+		for i in range(len(state)):
+			(start, last) = state[i]
+			if last == begin:
+				state[i] = (start, begin+data_size)
+				(start, last) = state[i]
+				insert_pos = i
+				inserted = True
+				self.logger.debug("Growing piece %d to %d,%d"%(index,start,begin+data_size))
+		if inserted:
+			if insert_pos+1 < len(state):
+				if begin + data_size == state[insert_pos+1][0]:
+					del x[insert_pos+1]
+					state[insert_pos][1] = state[insert_pos+1][1]
+		else:		
+			state.append((begin, begin+data_size))
+			state.sort()
 
 		self.logger.debug("State is %s", state)
 
