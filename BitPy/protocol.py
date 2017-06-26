@@ -135,7 +135,7 @@ class PeerConnection(Int32StringReceiver):
 		self.peer.set_bitfield(line)
 
 	def send_BITFIELD(self, bits):
-		self.sendString('\x05' + self.download.bitfield)
+		self.sendString('\x05' + struct.pack('!%uc'%len(bits),*bits))
 
 	def handle_PIECE(self,line):
 		index,begin = struct.unpack('!II',line[:8])
