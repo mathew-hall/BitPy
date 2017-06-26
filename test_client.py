@@ -5,6 +5,7 @@ import BitPy.client
 import BitPy.torrents
 import logging
 
+import binhex
 
 import unittest
 import struct
@@ -17,6 +18,11 @@ from twisted.internet.protocol import Factory, Protocol
 from twisted.internet.endpoints import TCP4ClientEndpoint
 from twisted.internet import defer
 
+import hashlib
+
+sha1 = hashlib.sha1()
+sha1.update('a'*10)
+sha1_10_as = sha1.digest()
 
 def get_torrent():
 	return BitPy.torrents.load_torrent_file("ubuntu-15.10-desktop-amd64.iso.torrent")
@@ -81,14 +87,14 @@ class TestDownload(unittest.TestCase):
 		assert_equals(self.download.piece_progress(0), 0.5)
 
 	def test_bitfield(self):
-		self.torrent.info.pieces = ['\x41'*20, '\x42'*20]
+		self.torrent.info.pieces = [sha1_10_as for _ in range(2)]
 		self.torrent.info.piece_length=10
 		assert_equals(self.download.bitfield,['\x00'])
 		self.download.store_piece(0,0,'a'*10)
 		assert_equals(self.download.bitfield, [chr(0b10000000)])
 
 	def test_verify_piece(self):
-		self.torrent.info.pieces = ['3495ff69d34671d1e15b33a63c1379fdedd3a32a'.decode('hex')]
+		self.torrent.info.pieces = [sha1_10_as]
 		self.torrent.info.piece_length = 10
 		self.download.store_piece(0,0,'a'*10)
 		assert_true(self.download.have_piece(0))
@@ -105,7 +111,7 @@ class TestDownload(unittest.TestCase):
 		assert_equals(self.download.progress,1)
 
 	def test_missing_pieces(self):
-		self.torrent.info.pieces = ['3495ff69d34671d1e15b33a63c1379fdedd3a32a'.decode('hex') for _ in range(0,3)]
+		self.torrent.info.pieces = [sha1_10_as for _ in range(0,3)]
 		self.torrent.info.piece_length=10
 		assert_equals(self.download.missing_pieces, [0,1,2])
 		self.download.store_piece(0,0,'a'*10)
