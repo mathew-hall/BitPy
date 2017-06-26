@@ -37,31 +37,43 @@ class Download():
 		self.file = open(self.filename, "r+b")
 
 		if os.path.getsize(self.filename) != self.torrent.info.size:
-			self.file.seek(self.torrent.info.size)
+			self.logger.info("Creating file %s as size(%d) is wrong (should be %d)",self.filename,os.path.getsize(self.filename),self.torrent.info.size)
+			self.file.seek(self.torrent.info.size -1)
 			self.file.write('\0')
+			self.file.truncate()
 			self.file.seek(0)
+			
+		else:
+			self.check_progress()
 
+	def check_progress(self):
+		self.logger.info("Loading %d pieces from %s",self.torrent.info.num_pieces,self.filename)
+		count = 0
+		for piece in range(self.torrent.info.num_pieces):
+			if self.verify_piece(piece):
+				count += 1
+		self.logger.info("Loaded %d completed pieces, progress is %f", count, self.progress)
+			
 
 	@property
 	def bitfield(self):
-		num_pieces = len(self.torrent.info.pieces)
+		num_pieces = self.torrent.info.num_pieces
 
 		bitfield = list('\x00' * int(math.ceil(num_pieces / 8.0)))
 
 		#self.logger.debug("State is %s", repr(self.piece_state))
 
-		for piece,state in self.piece_state.iteritems():
-			if self.have_piece(piece):
-				#self.logger.debug("Have piece %d",piece)
-				index = piece // 8
-				bit   = 7 - (piece % 8)
-				bitfield[index] = chr(ord(bitfield[index]) | (1 << bit))
-				#self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
+		for piece in self.pieces:
+			#self.logger.debug("Have piece %d",piece)
+			index = piece // 8
+			bit   = 7 - (piece % 8)
+			bitfield[index] = chr(ord(bitfield[index]) | (1 << bit))
+			#self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
 		return bitfield
 
 	@property
 	def progress(self):
-		pieces = len(self.torrent.info.pieces)
+		pieces = self.torrent.info.num_pieces
 		return len(self.pieces)/float(pieces)
 
 	def get_piece(self,index,start=0, length=None):
@@ -69,20 +81,29 @@ class Download():
 		readsize = length if length else self.piece_size(index)
 		return self.file.read(readsize)
 
-
-	def have_piece(self, index):
-		if index in self.pieces:
-			return True
-		if self.piece_progress(index) != 1: return False
+	
+	def verify_piece(self, index):
 		piece = self.get_piece(index)
 		sha1 = hashlib.sha1()
 		sha1.update(piece)
 		hash = sha1.digest()
-		self.logger.debug("Checking piece %d %s hash %s against %s"%(index,piece,repr(hash),repr(self.torrent.info.pieces[index])))
 		if hash == self.torrent.info.pieces[index]:
 			self.pieces.add(index)
+			self.logger.debug("Piece %d verified",index)
+			return True
+		self.logger.debug("Piece %d failed hash check",index)
+		if index in self.piece_state:
+			del self.piece_state[index]
+		return False
 
+	def have_piece(self, index):
+		if index in self.pieces:
+			return True
+		
+		
 	def piece_progress(self, index):
+		if self.have_piece(index):
+			return 1
 		piece_size = self.piece_size(index)
 		if index not in self.piece_state:
 			return 0
@@ -167,8 +188,10 @@ class Download():
 
 		self.piece_state[index] = state
 		
-		if self.have_piece(index):
-			self.pieces.add(index)
+		if self.piece_progress(index) == 1:
+			self.logger.debug("Have all pieces of %d, verifying",index)
+			self.verify_piece(index)
+
 
 
 
