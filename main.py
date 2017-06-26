@@ -24,12 +24,12 @@ if not options.filename:
 	parser.print_help()
 	sys.exit(-1)
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 logging.getLogger(__name__).info("Loading file %s", options.filename)
 
 file = BitPy.torrents.load_torrent_file(options.filename)
-logging.getLogger(__name__).info("Loading file c %s", options.filename)
+
 client = BitPy.client.Client(file)
 
 if not options.verify:
