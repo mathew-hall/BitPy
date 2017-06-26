@@ -70,11 +70,15 @@ class Download():
 			bitfield[index] = chr(ord(bitfield[index]) | (1 << bit))
 			#self.logger.debug("index is %d, bit is %d, bitfield is %s", index,bit,bitfield)
 		return bitfield
+	
+	@property
+	def finished_pieces(self):
+		return len(self.pieces)
 
 	@property
 	def progress(self):
 		pieces = self.torrent.info.num_pieces
-		return len(self.pieces)/float(pieces)
+		return self.finished_pieces/float(pieces)
 
 	def get_piece(self,index,start=0, length=None):
 		self.seek_block_part(index,start)
@@ -89,9 +93,9 @@ class Download():
 		hash = sha1.digest()
 		if hash == self.torrent.info.pieces[index]:
 			self.pieces.add(index)
-			self.logger.debug("Piece %d verified",index)
+			self.logger.debug("Piece %d verified, progress is %f",index,self.progress)
 			return True
-		self.logger.debug("Piece %d failed hash check",index)
+		#self.logger.debug("Piece %d failed hash check",index)
 		if index in self.piece_state:
 			del self.piece_state[index]
 		return False
@@ -189,7 +193,6 @@ class Download():
 		self.piece_state[index] = state
 		
 		if self.piece_progress(index) == 1:
-			self.logger.debug("Have all pieces of %d, verifying",index)
 			self.verify_piece(index)
 
 
@@ -238,7 +241,8 @@ class Client():
 	def __init__(self, torrent):
 		self.uploaded = 0
 		self.downloaded = 0
-		self.peers_wanted = 20
+		self.peers_wanted = 300
+		self.peer_connection_max = 10
 		self.peer_id = ''.join(chr(random.randint(0,255)) for _ in range(20))
 		self.key = ''.join(chr(random.randint(0,255)) for _ in range(20))
 		self.peers = []
@@ -247,16 +251,28 @@ class Client():
 		self.download = Download(torrent)
 		self.port = 8123
 		self.tracker_id = None
+		self.requests = set()
+		self.peer_start = 0
 
 	def check_peers(self):
-		for i in range(0,min(len(self.peers),self.peers_wanted - len(self.connected_peers))):
+		peers_to_get = self.peer_connection_max - len(self.connected_peers)
+		self.logger.info("Trying to get %d peers", peers_to_get)
+		for i in range(self.peer_start,min(len(self.peers),self.peer_start + peers_to_get)):
 			self.connect_peer(self.peers[i])
+		self.peer_start += peers_to_get
+		if self.peer_start > len(self.peers):
+			self.peer_start = 0
 
 	def listen_for_connections(self):
 		return reactor.listenTCP(self.port, protocol.PeerClientFactory(self))
 
 	def connect_peer(self, peer):
 		return reactor.connectTCP(peer.host, peer.port, protocol.PeerClientFactory(self))
+	
+	def disconnect_peer(self,peer):
+		if peer in self.connected_peers:
+			self.connected_peers.remove(peer)
+			#self.check_peers()
 
 	def handle_request(self,peer,request):
 		piece,begin,length = request
@@ -289,20 +305,47 @@ class Client():
 
 	def start(self):
 		self.logger.info("Announcing to tracker")
-		announce = self.tracker_event()
-		self.handle_tracker_response(announce)
+		tracker_call = task.LoopingCall(self.ping_tracker)
+		tracker_call.start(300.0)
+		
+		peer_call = task.LoopingCall(self.check_peers)
+		peer_call.start(60.0) 
 		
 		tick_call = task.LoopingCall(self.tick)
-		tick_call.start(10.0)
+		tick_call.start(5.0)
 		
+		empty_call = task.LoopingCall(self.empty_requests)
+		empty_call.start(180.0, now=False)
+		
+		task.LoopingCall(self.info).start(30)
+	
+	def ping_tracker(self):
+		announce = self.tracker_event()
+		self.handle_tracker_response(announce)
+	
+	def empty_requests(self):
+		"""
+		Forget any requests for pieces that have been made.
+		This is done periodically to balance duplicates with requests
+		sent to clients that go away
+		"""
+		self.requests = set()
+		
+	def info(self):
+		"""
+		Prints some information about the state of the client
+		"""
+		self.logger.info("Download %f%% (have %d pieces), %d connected clients, %d total peers, %d requests",
+		self.download.progress * 100, self.download.finished_pieces,
+		len(self.connected_peers),
+		len(self.peers),
+		len(self.requests)
+		)
 
 	def tick(self):
 		"""
 		Decide what to do when the Twisted event loop gives us time.
 		"""
-		if len(self.connected_peers) < self.peers_wanted:
-			self.logger.info("Connecting to some peers")
-			self.check_peers()
 			
 		# First see if we can send anything requested:
 		for peer in self.connected_peers:
@@ -325,9 +368,10 @@ class Client():
 		# Do they have any pieces we don't?
 		for peer in self.connected_peers:
 			if peer.choked:
+				peer.connection.disconnect()
 				continue
 			pieces = self.get_pieces_to_request(peer)
-			for piece in itertools.islice(pieces, 1):
+			for piece in itertools.islice(pieces, 2):
 				peer.connection.send_UNCHOKE()
 				self.logger.debug("Requesting piece %s from peer %s"%(piece,peer))
 				for part in range(0,self.download.piece_size(piece),2**14):
@@ -335,7 +379,10 @@ class Client():
 						requests[(piece,part)] = peer
 		for (data,peer) in requests.iteritems():
 			piece,part = data
+			if data in self.requests:
+				continue
 			peer.connection.send_REQUEST(piece, part, 2**14)
+			self.requests.add(data)
 
 
 	def get_needed(self):
