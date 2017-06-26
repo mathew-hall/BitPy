@@ -27,6 +27,15 @@ class PeerConnection(Int32StringReceiver):
 
 	def connectionMade(self):
 		self.send_HANDSHAKE()
+	
+	def connectionLost(self,reason):
+		if self.peer:
+			self.logger.debug("Lost connection from %s",self.peer)
+			self.client.disconnect_peer(self.peer)
+			self.peer.connection = None
+			
+	def disconnect(self):
+		self.transport.loseConnection()
 
 	def dataReceived(self, recd):
 		if self.state == "HANDSHAKE":
@@ -154,7 +163,8 @@ class PeerClientFactory(Factory):
 		self.client = client
 
 	def startedConnecting(self, connector):
-		self.logger.info('Started to connect: %s'%repr(connector))
+		#self.logger.info('Started to connect: %s'%repr(connector))
+		pass
 
 	def clientConnectionLost(self,reason,_):
 		pass
