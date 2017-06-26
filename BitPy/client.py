@@ -22,7 +22,7 @@ class Download():
 	def __init__(self, torrent):
 		self.torrent = torrent
 		self.peers = []
-		self.pieces = {}
+		self.pieces = set()
 		self.piece_state = {}
 		self.tracker_id = None
 		self.connected_peers = []
@@ -71,13 +71,16 @@ class Download():
 
 
 	def have_piece(self, index):
+		if index in self.pieces:
+			return True
 		if self.piece_progress(index) != 1: return False
 		piece = self.get_piece(index)
 		sha1 = hashlib.sha1()
 		sha1.update(piece)
 		hash = sha1.digest()
-		self.logger.debug("Checking piece %d %s hash %s against %s"%(index,piece,hash,self.torrent.info.pieces[index]))
-		return hash == self.torrent.info.pieces[index]
+		self.logger.debug("Checking piece %d %s hash %s against %s"%(index,piece,repr(hash),repr(self.torrent.info.pieces[index])))
+		if hash == self.torrent.info.pieces[index]:
+			self.pieces.add(index)
 
 	def piece_progress(self, index):
 		piece_size = self.piece_size(index)
@@ -86,6 +89,9 @@ class Download():
 
 		current_end_byte = 0
 		missing = 0
+		
+
+		
 		for (start,next_byte) in self.piece_state[index]:
 			missing = missing + start - current_end_byte
 			current_end_byte = next_byte
@@ -121,7 +127,9 @@ class Download():
 		#return mmap.mmap(self.file, self.piece_size(piece), offset=piece * self.torrent.info.piece_length)
 
 	def store_piece(self, index, begin, data):
-
+		if self.have_piece(index):
+			return
+			
 		data_size = len(data)
 
 		file_offset = index * self.torrent.info.piece_length + begin
@@ -149,8 +157,8 @@ class Download():
 		if inserted:
 			if insert_pos+1 < len(state):
 				if begin + data_size == state[insert_pos+1][0]:
-					del x[insert_pos+1]
-					state[insert_pos][1] = state[insert_pos+1][1]
+					state[insert_pos] = (state[insert_pos][0],state[insert_pos+1][1])
+					del state[insert_pos+1]
 		else:		
 			state.append((begin, begin+data_size))
 			state.sort()
@@ -158,6 +166,9 @@ class Download():
 		self.logger.debug("State is %s", state)
 
 		self.piece_state[index] = state
+		
+		if self.have_piece(index):
+			self.pieces.add(index)
 
 
 
@@ -165,7 +176,7 @@ class Download():
 		if index < (self.torrent.info.num_pieces - 1):
 			return self.torrent.info.piece_length
 		else:
-			return self.torrent.info.size - self.torrent.info.num_pieces * (self.torrent.info.piece_length - 1)
+			return self.torrent.info.size - (self.torrent.info.num_pieces - 1)* self.torrent.info.piece_length 
 
 	@property
 	def missing_pieces(self):

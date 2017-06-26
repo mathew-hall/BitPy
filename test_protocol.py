@@ -21,6 +21,7 @@ class TestClient(unittest.TestCase):
 		self.torrent = get_torrent()
 		self.torrent.info.pieces = ['3495ff69d34671d1e15b33a63c1379fdedd3a32a'.decode('hex') for _ in range(0,3)]
 		self.torrent.info.piece_length=10
+		self.torrent.info.size = 30
 
 		self.client = BitPy.client.Client(self.torrent)
 		factory = BitPy.protocol.PeerClientFactory(self.client)
@@ -90,9 +91,9 @@ class TestClient(unittest.TestCase):
 
 
 	def test_store(self):
-		self.torrent.info.piece_length = 25
-		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*20)
-		assert_equals(self.client.download.pieces[0][:20], list('a'*20))
+		self.torrent.info.piece_length = 10
+		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*10)
+		assert_equals(self.client.download.get_piece(0), 'a'*10)
 
 	def test_handle_request(self):
 		self.send('\x07' + '\x00\x00\x00\x00' + '\x00\x00\x00\x00' + 'a'*10)

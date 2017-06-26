@@ -96,18 +96,21 @@ class TestDownload(unittest.TestCase):
 	def test_verify_piece(self):
 		self.torrent.info.pieces = [sha1_10_as]
 		self.torrent.info.piece_length = 10
+		self.torrent.info.size=10
+		assert_false(self.download.have_piece(0))
 		self.download.store_piece(0,0,'a'*10)
 		assert_true(self.download.have_piece(0))
-		self.torrent.info.pieces = ['a'*20]
-		assert_false(self.download.have_piece(0))
 
 	def test_progress(self):
-		self.torrent.info.pieces = ['a'*20, 'b'*20]
-		self.torrent.info_piece_length=5
+		self.torrent.info.pieces = [sha1_10_as for _ in range(2)]
+		self.torrent.info.piece_length=10
+		self.torrent.info.size = 20
 		assert_equals(self.download.progress,0)
-		self.download.store_piece(0,0,'a'*5)
+		self.download.store_piece(0,0,'a'*10)
+		assert_equals(self.download.piece_progress(0),1.0)
+		assert_true(self.download.have_piece(0))
 		assert_equals(self.download.progress,0.5)
-		self.download.store_piece(1,0,'a'*5)
+		self.download.store_piece(1,0,'a'*10)
 		assert_equals(self.download.progress,1)
 
 	def test_missing_pieces(self):
@@ -116,6 +119,19 @@ class TestDownload(unittest.TestCase):
 		assert_equals(self.download.missing_pieces, [0,1,2])
 		self.download.store_piece(0,0,'a'*10)
 		assert_equals(self.download.missing_pieces, [1,2])
+	
+	def test_piece_size(self):
+		self.torrent.info.pieces = [sha1_10_as]
+		self.torrent.info.piece_length = 10
+		self.torrent.info.size = 10
+		assert_equals(self.download.piece_size(0), 10)
+		
+	def test_two_piece_size(self):
+		self.torrent.info.pieces = [sha1_10_as,sha1_10_as]
+		self.torrent.info.piece_length = 10
+		self.torrent.info.size = 20
+		assert_equals(self.download.piece_size(0), 10)
+		assert_equals(self.download.piece_size(1), 10)
 
 
 class TestRemote():

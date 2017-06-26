@@ -16,12 +16,12 @@ def test_download_status():
 	download.torrent.info.piece_length=10
 	
 	download.store_piece(0,0,'a')	
-	assert_equals(download.state[0],[(0,1)])
+	assert_equals(download.piece_state[0],[(0,1)])
 	
 	download.store_piece(0,2,'a')
-	assert_equals(download.state[0],[(0,1),(2,3)])
+	assert_equals(download.piece_state[0],[(0,1),(2,3)])
 	
 	download.store_piece(0,1,'a')
 	
-	assert_equals(download.state[0],[(0,3)])
+	assert_equals(download.piece_state[0],[(0,3)])
 	
