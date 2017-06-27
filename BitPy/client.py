@@ -263,6 +263,7 @@ class Client():
 		self.tracker_id = None
 		self.requests = set()
 		self.peer_start = 0
+		self.disable_announce = False
 
 	def check_peers(self):
 		peers_to_get = self.peer_connection_max - len(self.connected_peers)
@@ -314,9 +315,10 @@ class Client():
 					yield offset + bit
 
 	def start(self):
-		self.logger.info("Announcing to tracker")
-		tracker_call = task.LoopingCall(self.ping_tracker)
-		tracker_call.start(300.0)
+		if not self.disable_announce:
+			self.logger.info("Announcing to tracker")
+			tracker_call = task.LoopingCall(self.ping_tracker)
+			tracker_call.start(300.0)
 		
 		peer_call = task.LoopingCall(self.check_peers)
 		peer_call.start(60.0) 
