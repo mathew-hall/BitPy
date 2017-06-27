@@ -358,23 +358,31 @@ class Client():
 		"""
 		Decide what to do when the Twisted event loop gives us time.
 		"""
-			
+		sent_peers = set()
 		# First see if we can send anything requested:
 		for peer in self.connected_peers:
+			if peer.choked:
+				continue
 			for piece in peer.requests:
 				idx, begin, length = piece
 				if self.download.have_piece(idx):
 					self.logger.debug("Sending piece %s to peer %s"%(piece, peer))
 					peer.connection.send_PIECE(idx,begin, self.download.get_piece(idx,begin,length))
+			sent_peers.add(peer)
 				
 		# Do we have any pieces thy don't?
 		for peer in self.connected_peers:
+			if peer in sent_peers :
+				# Skip peers we've handled requests for
+				continue
 			#Note: we should be smarter about this.
 			if not peer.choked:
 				pieces_interested = self.get_pieces_to_send(peer)
 				for piece in itertools.islice(pieces_interested,1):
 					self.logger.debug("Sending piece %s to peer %s"%(piece, peer))
-					peer.connection.send_PIECE(piece, 0, self.download.get_piece(piece))
+					peer.connection.send_UNCHOKE()
+					for part in range(0,self.download.piece_size(piece),2**14):
+						peer.connection.send_PIECE(piece, part, self.download.get_piece(piece,part,2**14))
 
 		requests = {}
 		# Do they have any pieces we don't?
