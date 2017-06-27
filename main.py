@@ -20,6 +20,10 @@ parser.add_option("-v", "--verify",
 parser.add_option("-d", "--debug",dest="debug",
 					action="store_true",
 					default=False)
+parser.add_option("-H", "--add-peer-host",dest="hostname",
+				action="store",metavar="PEER_HOST")
+parser.add_option("-P", "--add-peer-port",dest="port",
+				action="store",metavar="PORT")
 parser.add_option("-q", "--disable-announce",dest="quiet",
 				action="store_true", default=False)
 
@@ -40,6 +44,11 @@ file = BitPy.torrents.load_torrent_file(options.filename)
 client = BitPy.client.Client(file)
 
 client.disable_announce = options.quiet
+
+if options.hostname and options.port:
+	logging.getLogger(__name__).info("Adding peer %s:%s", options.hostname,options.port)
+	client.add_peer(options.hostname,int(options.port))
+
 if not options.verify:
 	logging.getLogger(__name__).info("Starting download of %s", options.filename)
 	client.start()
