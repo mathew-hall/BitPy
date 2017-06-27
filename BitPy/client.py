@@ -253,8 +253,8 @@ class Client():
 		self.downloaded = 0
 		self.peers_wanted = 300
 		self.peer_connection_max = 10
-		self.peer_id = ''.join(chr(random.randint(0,255)) for _ in range(20))
-		self.key = ''.join(chr(random.randint(0,255)) for _ in range(20))
+		self.peer_id = '-TR' + ''.join(chr(random.randint(0x61,0x7a)) for _ in range(17))
+		self.key = ''.join(chr(random.randint(0x61,0x7a)) for _ in range(20))
 		self.peers = []
 		self.connected_peers = []
 		self.torrent = torrent
