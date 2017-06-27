@@ -378,7 +378,8 @@ class Client():
 		# Do they have any pieces we don't?
 		for peer in self.connected_peers:
 			if peer.choked:
-				peer.connection.disconnect()
+				if peer.connection:
+					peer.connection.disconnect()
 				continue
 			pieces = self.get_pieces_to_request(peer)
 			for piece in itertools.islice(pieces, 2):

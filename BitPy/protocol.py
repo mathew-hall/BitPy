@@ -155,6 +155,8 @@ class PeerConnection(Int32StringReceiver):
 	def send_PIECE(self, index, begin, block):
 		self.sendString('\x07' + struct.pack('!II', index,begin) + block)
 
+	def handle_CANCEL(self, index, begin, length):
+		pass
 
 class PeerClientFactory(Factory):
 	#TODO: notify client on disconnect
