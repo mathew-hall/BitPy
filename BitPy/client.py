@@ -19,7 +19,7 @@ import protocol
 class Download():
 	logger = logging.getLogger(__name__)
 
-	def __init__(self, torrent):
+	def __init__(self, torrent, filename=None, file=None):
 		self.torrent = torrent
 		self.peers = []
 		self.pieces = set()
@@ -33,6 +33,16 @@ class Download():
 		if self.torrent.info.filemode == 'single':
 			self.filename = os.sep.join(self.torrent.info.files[0]['path'])
 			
+		if filename:
+			self.filename = filename
+		
+		if file:
+			self.file = file
+			return
+		
+		if not os.path.exists(self.filename):
+			self.logger.debug("Creating file %s", self.filename)
+			open('file', 'w').close()
 		
 		self.file = open(self.filename, "r+b")
 
@@ -238,7 +248,7 @@ class Client():
 	logger = logging.getLogger('client')
 
 
-	def __init__(self, torrent):
+	def __init__(self, torrent, file=None):
 		self.uploaded = 0
 		self.downloaded = 0
 		self.peers_wanted = 300
@@ -248,7 +258,7 @@ class Client():
 		self.peers = []
 		self.connected_peers = []
 		self.torrent = torrent
-		self.download = Download(torrent)
+		self.download = Download(torrent,file=file)
 		self.port = 8123
 		self.tracker_id = None
 		self.requests = set()

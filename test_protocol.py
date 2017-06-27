@@ -13,6 +13,8 @@ from nose.tools import assert_equals
 from nose.tools import assert_true
 from nose.tools import assert_false
 
+import tempfile
+
 def get_torrent():
 	return BitPy.torrents.load_torrent_file("ubuntu-15.10-desktop-amd64.iso.torrent")
 
@@ -23,7 +25,7 @@ class TestClient(unittest.TestCase):
 		self.torrent.info.piece_length=10
 		self.torrent.info.size = 30
 
-		self.client = BitPy.client.Client(self.torrent)
+		self.client = BitPy.client.Client(self.torrent, file=tempfile.SpooledTemporaryFile())
 		factory = BitPy.protocol.PeerClientFactory(self.client)
 
 		self.proto = factory.buildProtocol(('127.0.0.1', 0))

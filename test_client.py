@@ -20,6 +20,8 @@ from twisted.internet import defer
 
 import hashlib
 
+import tempfile
+
 sha1 = hashlib.sha1()
 sha1.update('a'*10)
 sha1_10_as = sha1.digest()
@@ -30,7 +32,7 @@ def get_torrent():
 class TestTracker():
 	def setUp(self):
 		self.torrent = get_torrent()
-		self.client = BitPy.client.Client(self.torrent)
+		self.client = BitPy.client.Client(self.torrent, file=tempfile.SpooledTemporaryFile())
 
 	def test_client_generates_peer_id(self):
 		assert_equals(len(self.client.peer_id), 20)
@@ -52,7 +54,7 @@ class TestTracker():
 class TestClientBeaviour(unittest.TestCase):
 	def setUp(self):
 		self.torrent = get_torrent()
-		self.client = BitPy.client.Client(self.torrent)
+		self.client = BitPy.client.Client(self.torrent, file=tempfile.SpooledTemporaryFile())
 		response = {u'peers': u"\xcaSm\xcd\xd5\x80.\xa0\x04p\xc8\xd5\xd5\xde\x96\xb2l\xcfU_\xb8\xc6\x1bE_\x18\xb5\xdb\x96'l=\xaal\x1a\xe2b\xf6\xec\xa5\xa7\xe1\xc6\x1bU\x8b\xd9 O!\xc9\xcf\x12n\xc2\xe2\x9b\t\xde\xa7", u'interval': 1800, u'complete': 3837, u'incomplete': 98}
 		self.client.handle_tracker_response(response)
 		self.client.peers_wanted=5
@@ -67,24 +69,20 @@ class TestClientBeaviour(unittest.TestCase):
 class TestDownload(unittest.TestCase):
 	def setUp(self):
 		self.torrent = get_torrent()
-		self.download = BitPy.client.Download(self.torrent)
+		self.download = BitPy.client.Download(self.torrent,file=tempfile.SpooledTemporaryFile())
 		self.torrent.info.piece_length = 50
 
 	def test_empty_progress(self):
 		assert_equals(self.download.piece_progress(0), 0)
 
-	def test_full_progress(self):
-		self.download.store_piece(0,0,'\x00' * self.torrent.info.piece_length)
-		assert_equals(self.download.piece_progress(0), 1)
-
 	def test_full_progress_from_multiple_pieces(self):
-		self.download.store_piece(0,0,'\xaa' * 10)
-		self.download.store_piece(0,10,'\x01' * (self.torrent.info.piece_length - 10))
+		self.download.store_piece(0,0,'a')
+		self.torrent.info.piece_length=10
+		self.torrent.info.pieces = [sha1_10_as]
+		self.torrent.info.size=10
+		assert_equals(self.download.piece_progress(0), .1)
+		self.download.store_piece(0,1,'a' * 9)
 		assert_equals(self.download.piece_progress(0), 1)
-
-	def test_partial_progress(self):
-		self.download.store_piece(0,0,'\xaa' * 25)
-		assert_equals(self.download.piece_progress(0), 0.5)
 
 	def test_bitfield(self):
 		self.torrent.info.pieces = [sha1_10_as for _ in range(2)]
