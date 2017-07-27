@@ -137,7 +137,6 @@ class PeerConnection(Int32StringReceiver):
 		self.peer.add_request(*struct.unpack('!3I',line))
 
 	def send_REQUEST(self,piece,begin,length):
-		self.logger.debug("Asking peer %s for piece %d [%d,%d]",self.peer, piece, begin, length)
 		self.sendString('\x06' + struct.pack('!3I', piece,begin,length))
 
 	def handle_BITFIELD(self, line):
@@ -149,8 +148,7 @@ class PeerConnection(Int32StringReceiver):
 	def handle_PIECE(self,line):
 		index,begin = struct.unpack('!II',line[:8])
 		block = line[8:]
-		self.logger.debug("Storing %d bytes at chunk %d offset %d",len(block), index,begin)
-		self.client.download.store_piece(index,begin,block)
+		self.client.handle_piece(self.peer,index,begin,block)
 
 	def send_PIECE(self, index, begin, block):
 		self.sendString('\x07' + struct.pack('!II', index,begin) + block)

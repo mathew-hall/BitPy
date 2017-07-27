@@ -224,9 +224,27 @@ class Peer():
 		self.host = host
 		self.port = port
 		self.bitfield = list('\x00' * int(math.ceil(pieces / 8.0)))
-		self.choked = True
+		self._choked = True
 		self.interested = False
-		self.requests = []
+		self.requests = set()
+		self.received = 0
+		self.sent = 0
+	
+	def __hash__(self):
+		return hash((self.host,self.port))
+	
+	def __eq__(self,other):
+		return self.host == other.host and self.port == other.port
+	
+	@property
+	def choked(self):
+		return self._choked
+	
+	@choked.setter
+	def choked(self,value):
+		self._choked = value
+		if self.choked:
+			self.requests = set()
 
 	def set_have(self, piece):
 		index = piece // 8
@@ -264,6 +282,10 @@ class Client():
 		self.requests = set()
 		self.peer_start = 0
 		self.disable_announce = False
+		self.request_buffer_size=50
+		self.live_requests = 0
+		self.inprogress_requests = set()
+		self.requested_parts = set()
 
 	def check_peers(self):
 		peers_to_get = self.peer_connection_max - len(self.connected_peers)
@@ -287,8 +309,26 @@ class Client():
 
 	def handle_request(self,peer,request):
 		piece,begin,length = request
-		if self.download.have_piece(piece):
+		if self.download.have_piece(piece) and not peer.choked:
+			peer.sent += length
 			peer.connection.send_PIECE(piece,begin,self.download.get_piece(piece,begin,length))
+			
+	def handle_piece(self, peer, index, begin, data):
+		"""
+		When a peer finishes downloading a piece and checks that the hash matches, it announces that it has that piece to all of its peers.
+
+		"""
+		self.download.store_piece(index,begin,data)
+		peer.received += len(data)
+		if self.download.have_piece(index):
+			self.notify_have(index)
+		self.live_requests -= 1
+		self.inprogress_requests.remove((index,begin))
+		self.send_request()
+	
+	def notify_have(self,index):
+		for peer in self.connected_peers:
+			peer.connection.send_HAVE(index)
 
 	def get_pieces_to_request(self, peer):
 		my_pieces = self.download.bitfield
@@ -323,88 +363,130 @@ class Client():
 		peer_call = task.LoopingCall(self.check_peers)
 		peer_call.start(60.0) 
 		
-		tick_call = task.LoopingCall(self.tick)
-		tick_call.start(5.0)
+		choke_peers_call = task.LoopingCall(self.choke_peers)
+		choke_peers_call.start(10.0)
 		
-		empty_call = task.LoopingCall(self.empty_requests)
-		empty_call.start(180.0, now=False)
 		
 		task.LoopingCall(self.info).start(30)
+		
+		for request in range(10):
+			self.send_request()
+		
+		
+
 	
 	def ping_tracker(self):
 		announce = self.tracker_event()
 		self.handle_tracker_response(announce)
-	
-	def empty_requests(self):
-		"""
-		Forget any requests for pieces that have been made.
-		This is done periodically to balance duplicates with requests
-		sent to clients that go away
-		"""
-		self.requests = set()
 		
 	def info(self):
 		"""
 		Prints some information about the state of the client
 		"""
-		self.logger.info("Download %f%% (have %d pieces), %d connected clients, %d total peers, %d requests",
+		counts = {}
+		for (peer,piece,part) in self.requests:
+			counts[peer] = 0 if peer not in counts else counts[peer] + 1
+		
+		self.logger.info("Download %f%% (have %d pieces), %d connected clients, %d total peers, %d requests buffered, %d live requests, %d peers being requested, %r",
 		self.download.progress * 100, self.download.finished_pieces,
 		len(self.connected_peers),
 		len(self.peers),
-		len(self.requests)
+		len(self.requests),
+		self.live_requests,
+		len(counts.keys()),
+		counts
 		)
+	
+	def choke_peers(self):
+		"""
+		Decide which peers we want to send us something based on what
+		we know of them so far
+		"""
+		for peer in self.connected_peers:
+			peer.connection.send_UNCHOKE()
+		
+	def fill_request_buffer(self):
+		"""
+		Buffer a large number of requests to send.
+		As soon as we receive responses we will use this list to request
+		more data to saturate the connection.
+		"""
 
-	def tick(self):
-		"""
-		Decide what to do when the Twisted event loop gives us time.
-		"""
-		sent_peers = set()
-		# First see if we can send anything requested:
+		if len(self.requests) > self.request_buffer_size:
+			return
 		for peer in self.connected_peers:
 			if peer.choked:
-				continue
-			for piece in peer.requests:
-				idx, begin, length = piece
-				if self.download.have_piece(idx):
-					self.logger.debug("Sending piece %s to peer %s"%(piece, peer))
-					peer.connection.send_PIECE(idx,begin, self.download.get_piece(idx,begin,length))
-			sent_peers.add(peer)
-				
-		# Do we have any pieces thy don't?
-		for peer in self.connected_peers:
-			if peer in sent_peers :
-				# Skip peers we've handled requests for
-				continue
-			#Note: we should be smarter about this.
-			if not peer.choked:
-				pieces_interested = self.get_pieces_to_send(peer)
-				for piece in itertools.islice(pieces_interested,1):
-					self.logger.debug("Sending piece %s to peer %s"%(piece, peer))
-					peer.connection.send_UNCHOKE()
-					for part in range(0,self.download.piece_size(piece),2**14):
-						peer.connection.send_PIECE(piece, part, self.download.get_piece(piece,part,2**14))
-
-		requests = {}
-		# Do they have any pieces we don't?
-		for peer in self.connected_peers:
-			if peer.choked:
-				if peer.connection:
-					peer.connection.disconnect()
 				continue
 			pieces = self.get_pieces_to_request(peer)
-			for piece in itertools.islice(pieces, 2):
-				peer.connection.send_UNCHOKE()
-				self.logger.debug("Requesting piece %s from peer %s"%(piece,peer))
+			chunks_requested = 0
+			for piece in pieces:
 				for part in range(0,self.download.piece_size(piece),2**14):
 					if not self.download.have_piece_range(piece,part,2**14):
-						requests[(piece,part)] = peer
-		for (data,peer) in requests.iteritems():
-			piece,part = data
-			if data in self.requests:
-				continue
-			peer.connection.send_REQUEST(piece, part, 2**14)
-			self.requests.add(data)
-
+						if not (piece,part) in self.requested_parts and \
+							not (piece,part) in self.inprogress_requests:
+							chunks_requested += 1
+							self.requests.add((peer,piece,part))
+							self.requested_parts.add((piece,part))
+				if chunks_requested >= 10:
+					break
+	
+	def send_request(self):
+		"""
+		Make a request from the request buffer.
+		This function is re-entrant: a call to it starts a repeated
+		chain of callbacks to the function, via the handle_piece
+		method. Three things can happen:
+		1. There are no requests to make
+		2. The scheduled peer has disconnected
+		3. The peer is connected and the piece hasn't already been asked for
+		
+		"""
+		# What we need here is to have
+		# several pieces per peer that we've asked for
+		# so each peer has a buffer and a chain of requests
+		# This method is responsible for keeping a live connection
+		# to a peer full.
+		
+		# It does this by:
+		# Asking for pieces to request as a list
+		# taking the first element of the list
+		# requesting it with a callback
+		# When a piece is requested it is removed from the request queue
+		# It sits on a waiting to hear back queue
+		# After a timeout it goes back on the main queue
+		# After a response it gets removed and doesn't go anywhere
+		
+		# Possible bugs:
+		# When the queue is being filled, a request might have been removed
+		# 
+		self.fill_request_buffer()
+		if self.requests:
+			valid_request = False
+			
+			while not valid_request and self.requests:
+				peer,piece,part = self.requests.pop()
+				valid_request = not self.download.have_piece_range(piece,part,2**14)
+			if peer.connection and valid_request:
+				peer.connection.send_UNCHOKE()
+				peer.connection.send_INTERESTED()
+				self.logger.debug("Requesting piece %d:%d from %s",piece,part,peer)
+				peer.connection.send_REQUEST(piece,part,2**14)
+				self.inprogress_requests.add((piece,part))
+				self.live_requests +=1 
+				def timeout_request():
+					if not self.download.have_piece_range(piece,part,2**14):
+						self.logger.debug("Request for piece %d:%d from %s timed out",piece,part,peer)
+						self.inprogress_requests.remove((piece,part))
+						self.requested_parts.remove((piece,part))
+						self.live_requests -= 1
+						self.send_request()
+				reactor.callLater(30, timeout_request)
+				
+			else:
+				reactor.callLater(10,self.send_request)
+		else:
+			reactor.callLater(10,self.send_request)
+		
 
 	def get_needed(self):
 		return 0
